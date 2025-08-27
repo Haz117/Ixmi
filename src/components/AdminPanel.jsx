@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 
 const AdminPanel = () => {
   const { currentUser, logout, signup } = useAuth();
@@ -10,6 +11,7 @@ const AdminPanel = () => {
   
   const [seccionales, setSeccionales] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all');
   const [showEditPersonForm, setShowEditPersonForm] = useState(false);
@@ -101,6 +103,80 @@ const AdminPanel = () => {
     }
   };
 
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      // Procesar los datos del Excel
+      let seccionalNumber = null;
+      const promotoresData = {};
+
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        
+        // Buscar el número de seccional
+        if (row[0] && typeof row[0] === 'string' && row[0].includes('SECCIONAL')) {
+          const match = row[0].match(/\d+/);
+          if (match) {
+            seccionalNumber = match[0];
+          }
+          continue;
+        }
+
+        // Procesar filas de datos
+        if (row.length >= 6 && row[1] && row[2] && row[3]) {
+          const numeroPersona = row[1];
+          const nombreCompleto = row[2];
+          const curp = row[3];
+          const claveElector = row[4];
+          const promotor = row[5];
+
+          if (!promotoresData[promotor]) {
+            promotoresData[promotor] = {
+              nombre: promotor,
+              personas: {}
+            };
+          }
+
+          promotoresData[promotor].personas[`persona_${numeroPersona}`] = {
+            numeroPersona,
+            nombreCompleto,
+            curp,
+            claveElector,
+            votoListo: false
+          };
+        }
+      }
+
+      if (seccionalNumber && Object.keys(promotoresData).length > 0) {
+        // Guardar en Firebase
+        const seccionalRef = doc(db, 'seccionales', `seccional_${seccionalNumber}`);
+        await setDoc(seccionalRef, {
+          numero: seccionalNumber,
+          promotores: promotoresData,
+          fechaActualizacion: new Date().toISOString()
+        }, { merge: true });
+
+        alert(`Datos de la Seccional ${seccionalNumber} subidos exitosamente!`);
+      } else {
+        alert('No se pudo procesar el archivo. Verifica el formato.');
+      }
+    } catch (error) {
+      console.error('Error al procesar el archivo:', error);
+      alert('Error al procesar el archivo: ' + error.message);
+    }
+    setUploading(false);
+    event.target.value = '';
+  };
+
   const handleVotoToggle = async (seccionalId, promotorId, personaId, currentVoto) => {
     try {
       const seccional = seccionales.find(s => s.id === seccionalId);
@@ -169,6 +245,48 @@ const AdminPanel = () => {
     } catch (error) {
       console.error('Error al eliminar persona:', error);
       alert('Error al eliminar persona: ' + error.message);
+    }
+  };
+
+  const handleDeleteSeccional = async (seccionalId, seccionalNumero) => {
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar completamente la Seccional ${seccionalNumero}? Esta acción no se puede deshacer y eliminará todos los promotores y personas asociadas.`)) {
+      return;
+    }
+    
+    // Segunda confirmación por la gravedad de la acción
+    if (!window.confirm(`CONFIRMACIÓN FINAL: Vas a eliminar TODA la Seccional ${seccionalNumero}. ¿Estás completamente seguro?`)) {
+      return;
+    }
+    
+    try {
+      const seccionalRef = doc(db, 'seccionales', seccionalId);
+      await deleteDoc(seccionalRef);
+      
+      alert(`Seccional ${seccionalNumero} eliminada exitosamente!`);
+    } catch (error) {
+      console.error('Error al eliminar seccional:', error);
+      alert('Error al eliminar seccional: ' + error.message);
+    }
+  };
+
+  const handleDeletePromotor = async (seccionalId, promotorId, promotorNombre) => {
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar al promotor "${promotorNombre}" y todas sus personas asociadas?`)) {
+      return;
+    }
+    
+    try {
+      const seccional = seccionales.find(s => s.id === seccionalId);
+      const updatedSeccional = { ...seccional };
+      
+      delete updatedSeccional.promotores[promotorId];
+
+      const seccionalRef = doc(db, 'seccionales', seccionalId);
+      await updateDoc(seccionalRef, updatedSeccional);
+      
+      alert(`Promotor "${promotorNombre}" eliminado exitosamente!`);
+    } catch (error) {
+      console.error('Error al eliminar promotor:', error);
+      alert('Error al eliminar promotor: ' + error.message);
     }
   };
 
@@ -350,6 +468,16 @@ const AdminPanel = () => {
               >
                 {showAddUserForm ? 'Cancelar' : '+ Agregar Usuario'}
               </button>
+              <label className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium cursor-pointer">
+                📁 Subir Excel
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                />
+              </label>
               <span className="text-sm text-gray-600">
                 Bienvenido, {currentUser?.email}
               </span>
@@ -411,6 +539,23 @@ const AdminPanel = () => {
             </div>
           </div>
         </div>
+
+        {/* Upload Status */}
+        {uploading && (
+          <div className="bg-white rounded-lg shadow mb-8">
+            <div className="p-6">
+              <div className="text-center">
+                <div className="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-white bg-purple-500">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Procesando archivo Excel...
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Add Person Section */}
         {showAddPersonForm && (
@@ -732,21 +877,41 @@ const AdminPanel = () => {
         ) : (
           getFilteredData().map((seccional) => (
             <div key={seccional.id} className="bg-white rounded-lg shadow mb-8">
-              <div className="px-6 py-4 border-b bg-blue-50">
+              <div className="px-6 py-4 border-b bg-blue-50 flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-blue-900">
                   Seccional {seccional.numero}
                 </h2>
+                <button
+                  onClick={() => handleDeleteSeccional(seccional.id, seccional.numero)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm font-medium flex items-center space-x-1"
+                  title="Eliminar toda la seccional"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                  </svg>
+                  <span>Eliminar Seccional</span>
+                </button>
               </div>
               
               {seccional.promotores && Object.entries(seccional.promotores).map(([promotorId, promotor]) => (
                 <div key={promotorId} className="border-b last:border-b-0">
-                  <div className="px-6 py-3 bg-gray-50">
+                  <div className="px-6 py-3 bg-gray-50 flex justify-between items-center">
                     <h3 className="text-lg font-medium text-gray-900">
                       Promotor: {promotor.nombre}
                       <span className="ml-2 text-sm text-gray-600">
                         ({Object.keys(promotor.personas || {}).length} personas)
                       </span>
                     </h3>
+                    <button
+                      onClick={() => handleDeletePromotor(seccional.id, promotorId, promotor.nombre)}
+                      className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs font-medium flex items-center space-x-1"
+                      title="Eliminar promotor y todas sus personas"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                      </svg>
+                      <span>Eliminar</span>
+                    </button>
                   </div>
                   
                   {promotor.personas && (
