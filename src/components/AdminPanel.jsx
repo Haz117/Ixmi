@@ -38,6 +38,7 @@ const AdminPanel = () => {
   const [stats, setStats] = useState({
     totalPersonas: 0,
     totalVotos: 0,
+    votosExternos: 0,
     promotores: {}
   });
 
@@ -437,6 +438,29 @@ const AdminPanel = () => {
     }
   };
 
+  const handleExternalVotesUpdate = async (value) => {
+    try {
+      const statsRef = doc(db, 'stats', 'voting');
+      await setDoc(statsRef, { votosExternos: parseInt(value) || 0 }, { merge: true });
+    } catch (error) {
+      console.error('Error al actualizar votos externos:', error);
+      alert('Error al actualizar votos externos');
+    }
+  };
+
+  useEffect(() => {
+    const unsubscribeStats = onSnapshot(doc(db, 'stats', 'voting'), (doc) => {
+      if (doc.exists()) {
+        setStats(prevStats => ({
+          ...prevStats,
+          votosExternos: doc.data().votosExternos || 0
+        }));
+      }
+    });
+
+    return () => unsubscribeStats();
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -496,16 +520,32 @@ const AdminPanel = () => {
         {/* Estadísticas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Personas</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Personas Registradas</h3>
             <p className="text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Listos</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Registrados</h3>
             <p className="text-3xl font-bold text-green-600">{stats.totalVotos}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Porcentaje</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Externos</h3>
+            <input
+              type="number"
+              min="0"
+              value={stats.votosExternos}
+              onChange={(e) => handleExternalVotesUpdate(e.target.value)}
+              className="w-full p-2 border rounded text-2xl font-bold text-orange-600 mb-2"
+            />
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Votos</h3>
             <p className="text-3xl font-bold text-purple-600">
+              {stats.totalVotos + stats.votosExternos}
+            </p>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Porcentaje de Votos Registrados</h3>
+            <p className="text-3xl font-bold text-indigo-600">
               {stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%
             </p>
           </div>

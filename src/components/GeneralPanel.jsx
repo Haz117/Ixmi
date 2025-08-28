@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, doc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const GeneralPanel = () => {
   const { currentUser, logout } = useAuth();
@@ -18,6 +19,11 @@ const GeneralPanel = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all'); // all, promotor, seccional
   const [editingPerson, setEditingPerson] = useState(null);
+  const [stats, setStats] = useState({
+    totalPersonas: 0,
+    totalVotos: 0,
+    votosExternos: 0
+  });
   const [editPersonData, setEditPersonData] = useState({
     nombreCompleto: '',
     curp: '',
@@ -29,9 +35,19 @@ const GeneralPanel = () => {
     claveElector: ''
   });
 
+  const handleExternalVotesUpdate = async (value) => {
+    try {
+      const statsRef = doc(db, 'stats', 'voting');
+      await setDoc(statsRef, { votosExternos: parseInt(value) || 0 }, { merge: true });
+    } catch (error) {
+      console.error('Error al actualizar votos externos:', error);
+      alert('Error al actualizar votos externos');
+    }
+  };
+
   useEffect(() => {
-    // Escuchar cambios en tiempo real
-    const unsubscribe = onSnapshot(collection(db, 'seccionales'), (snapshot) => {
+    // Escuchar cambios en tiempo real de seccionales y votos externos
+    const unsubscribeSeccionales = onSnapshot(collection(db, 'seccionales'), (snapshot) => {
       const seccionalesData = [];
       snapshot.forEach((doc) => {
         seccionalesData.push({ id: doc.id, ...doc.data() });
@@ -40,7 +56,20 @@ const GeneralPanel = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Escuchar cambios en votos externos
+    const unsubscribeStats = onSnapshot(doc(db, 'stats', 'voting'), (doc) => {
+      if (doc.exists()) {
+        setStats(prevStats => ({
+          ...prevStats,
+          votosExternos: doc.data().votosExternos || 0
+        }));
+      }
+    });
+
+    return () => {
+      unsubscribeSeccionales();
+      unsubscribeStats();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -277,7 +306,12 @@ const GeneralPanel = () => {
       }
     });
 
-    return { totalPersonas, totalVotos, promotores: promotoresStats };
+    return { 
+      totalPersonas, 
+      totalVotos, 
+      promotores: promotoresStats,
+      votosExternos: stats.votosExternos || 0 
+    };
   };
 
   // Función para filtrar personas basada en el término de búsqueda
@@ -342,7 +376,13 @@ const GeneralPanel = () => {
     }).filter(seccional => Object.keys(seccional.promotores || {}).length > 0);
   };
 
-  const stats = getStats();
+  useEffect(() => {
+    const localStats = getStats();
+    setStats(prevStats => ({
+      ...localStats,
+      votosExternos: prevStats.votosExternos
+    }));
+  }, [seccionales]);
 
   if (loading) {
     return (
@@ -653,20 +693,111 @@ const GeneralPanel = () => {
         )}
 
         {/* Estadísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Personas</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Personas Registradas</h3>
             <p className="text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Listos</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Registrados</h3>
             <p className="text-3xl font-bold text-green-600">{stats.totalVotos}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Porcentaje</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Externos</h3>
+            <input
+              type="number"
+              min="0"
+              value={stats.votosExternos}
+              onChange={(e) => handleExternalVotesUpdate(e.target.value)}
+              className="w-full p-2 border rounded text-2xl font-bold text-orange-600 mb-2"
+            />
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Votos</h3>
             <p className="text-3xl font-bold text-purple-600">
+              {stats.totalVotos + stats.votosExternos}
+            </p>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Porcentaje Registrados</h3>
+            <p className="text-3xl font-bold text-indigo-600">
               {stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%
             </p>
+          </div>
+        </div>
+
+        {/* Gráfica Comparativa de Votos */}
+        <div className="bg-white rounded-lg shadow mb-8">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-xl font-semibold text-gray-900">Comparativa de Votos</h2>
+          </div>
+          <div className="p-6">
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart
+                data={[
+                  {
+                    name: 'Registrados',
+                    total: stats.totalPersonas,
+                    votos: stats.totalVotos,
+                    noVotos: stats.totalPersonas - stats.totalVotos,
+                    porcentaje: stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0
+                  },
+                  {
+                    name: 'Externos',
+                    total: stats.votosExternos,
+                    votos: stats.votosExternos,
+                    noVotos: 0,
+                    porcentaje: 100
+                  }
+                ]}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip 
+                  formatter={(value, name) => {
+                    if (name === 'porcentaje') return `${value}%`;
+                    return value;
+                  }}
+                />
+                <Legend />
+                <Bar name="Total" dataKey="total" fill="#3B82F6" />
+                <Bar name="Votaron" dataKey="votos" fill="#10B981" />
+                <Bar name="No Votaron" dataKey="noVotos" fill="#EF4444" />
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Análisis de Votos Registrados</h3>
+                <p className="text-sm text-gray-600">
+                  De las {stats.totalPersonas} personas registradas:
+                </p>
+                <ul className="mt-2 space-y-1 text-sm">
+                  <li className="flex items-center">
+                    <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                    {stats.totalVotos} han votado ({stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%)
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
+                    {stats.totalPersonas - stats.totalVotos} no han votado ({stats.totalPersonas > 0 ? Math.round(((stats.totalPersonas - stats.totalVotos) / stats.totalPersonas) * 100) : 0}%)
+                  </li>
+                </ul>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Votos Externos</h3>
+                <p className="text-sm text-gray-600">
+                  Se han registrado {stats.votosExternos} votos externos.
+                </p>
+                <p className="mt-2 text-sm text-gray-600">
+                  Los votos externos representan el {
+                    (stats.totalVotos + stats.votosExternos) > 0 
+                      ? Math.round((stats.votosExternos / (stats.totalVotos + stats.votosExternos)) * 100) 
+                      : 0
+                  }% del total de votos.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
