@@ -40,6 +40,8 @@ const AdminPanel = () => {
     totalVotos: 0,
     promotores: {}
   });
+  const [totalVotantesDelDia, setTotalVotantesDelDia] = useState('');
+  const [diferencia, setDiferencia] = useState(null);
 
   useEffect(() => {
     // Verificar si el usuario es admin
@@ -437,6 +439,23 @@ const AdminPanel = () => {
     }
   };
 
+  const handleCalcularDiferencia = () => {
+    const total = parseInt(totalVotantesDelDia);
+    if (isNaN(total) || total < 0) {
+      alert('Por favor ingresa un número válido');
+      return;
+    }
+    const diff = total - stats.totalVotos;
+    setDiferencia(diff);
+  };
+
+  const resetDiferencia = () => {
+    setTotalVotantesDelDia('');
+    setDiferencia(null);
+  };
+
+
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -451,25 +470,34 @@ const AdminPanel = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow-lg border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">Panel de Administrador</h1>
-            <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 space-y-4 sm:space-y-0">
+            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Panel de Administrador</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <button
                 onClick={() => setShowAddPersonForm(!showAddPersonForm)}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
               >
-                {showAddPersonForm ? 'Cancelar' : '+ Agregar Persona'}
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                {showAddPersonForm ? 'Cancelar' : 'Agregar Persona'}
               </button>
               <button
                 onClick={() => setShowAddUserForm(!showAddUserForm)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
               >
-                {showAddUserForm ? 'Cancelar' : '+ Agregar Usuario'}
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                {showAddUserForm ? 'Cancelar' : 'Agregar Usuario'}
               </button>
-              <label className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium cursor-pointer">
-                📁 Subir Excel
+              <label className="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors duration-200 shadow-sm">
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                Subir Excel
                 <input 
                   type="file" 
                   className="hidden" 
@@ -478,13 +506,19 @@ const AdminPanel = () => {
                   disabled={uploading}
                 />
               </label>
-              <span className="text-sm text-gray-600">
-                Bienvenido, {currentUser?.email}
-              </span>
+              <div className="flex items-center space-x-3 text-sm text-gray-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="hidden sm:inline">Bienvenido, {currentUser?.email}</span>
+              </div>
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="inline-flex items-center bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
               >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
                 Cerrar Sesión
               </button>
             </div>
@@ -494,40 +528,81 @@ const AdminPanel = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Estadísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Personas</h3>
-            <p className="text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Total de Personas</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-blue-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+            </div>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Listos</h3>
-            <p className="text-3xl font-bold text-green-600">{stats.totalVotos}</p>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Votos Listos</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.totalVotos}</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-green-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Porcentaje</h3>
-            <p className="text-3xl font-bold text-purple-600">
-              {stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%
-            </p>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200 sm:col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Porcentaje</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-purple-600">
+                  {stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%
+                </p>
+              </div>
+              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Estadísticas por Promotor */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="px-6 py-4 border-b">
-            <h2 className="text-xl font-semibold text-gray-900">Estadísticas por Promotor</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas por Promotor</h2>
+            </div>
           </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {Object.entries(stats.promotores).map(([nombre, data]) => (
-                <div key={nombre} className="border rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-900">{nombre}</h4>
-                  <p className="text-sm text-gray-600">
-                    Personas: {data.totalPersonas} | Votos: {data.totalVotos}
-                  </p>
-                  <div className="mt-2">
+                <div key={nombre} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow duration-200">
+                  <h4 className="font-semibold text-gray-900 text-sm sm:text-base mb-2">{nombre}</h4>
+                  <div className="space-y-1">
+                    <p className="text-xs sm:text-sm text-gray-600">
+                      <span className="font-medium">Personas:</span> {data.totalPersonas}
+                    </p>
+                    <p className="text-xs sm:text-sm text-gray-600">
+                      <span className="font-medium">Votos:</span> {data.totalVotos}
+                    </p>
+                  </div>
+                  <div className="mt-3">
+                    <div className="flex justify-between text-xs text-gray-600 mb-1">
+                      <span>Progreso</span>
+                      <span>{data.totalPersonas > 0 ? Math.round((data.totalVotos / data.totalPersonas) * 100) : 0}%</span>
+                    </div>
                     <div className="bg-gray-200 rounded-full h-2">
                       <div 
-                        className="bg-blue-600 h-2 rounded-full"
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                         style={{ 
                           width: `${data.totalPersonas > 0 ? (data.totalVotos / data.totalPersonas) * 100 : 0}%` 
                         }}
@@ -540,18 +615,102 @@ const AdminPanel = () => {
           </div>
         </div>
 
+        {/* Sección de Votantes del Día */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Control de Votantes del Día</h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <div className="space-y-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  Total de votantes que acudieron hoy:
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="number"
+                    value={totalVotantesDelDia}
+                    onChange={(e) => setTotalVotantesDelDia(e.target.value)}
+                    placeholder="Ingresa el total de votantes"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCalcularDiferencia}
+                      className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      Calcular
+                    </button>
+                    <button
+                      onClick={resetDiferencia}
+                      className="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Limpiar
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              {diferencia !== null && (
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 rounded-xl border border-gray-200">
+                  <div className="flex items-center mb-3">
+                    <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-gray-900">Resultado del Análisis</h3>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Registrados</p>
+                        <p className="text-lg font-bold text-blue-600">{stats.totalVotos}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Total del día</p>
+                        <p className="text-lg font-bold text-green-600">{totalVotantesDelDia}</p>
+                      </div>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg">
+                      <p className={`text-base sm:text-lg font-bold text-center ${diferencia > 0 ? 'text-red-600' : diferencia < 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {diferencia > 0 ? 
+                          `Faltan ${diferencia} votantes por registrar` :
+                          diferencia < 0 ?
+                          `Hay ${Math.abs(diferencia)} votantes de más registrados` :
+                          'Los números coinciden perfectamente'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Upload Status */}
         {uploading && (
-          <div className="bg-white rounded-lg shadow mb-8">
-            <div className="p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+            <div className="p-4 sm:p-6">
               <div className="text-center">
-                <div className="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-white bg-purple-500">
+                <div className="inline-flex items-center px-4 py-3 font-semibold leading-6 text-sm shadow-sm rounded-lg text-white bg-purple-600">
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   Procesando archivo Excel...
                 </div>
+                <p className="mt-2 text-sm text-gray-600">Por favor espera mientras se procesan los datos</p>
               </div>
             </div>
           </div>
@@ -559,22 +718,29 @@ const AdminPanel = () => {
 
         {/* Add Person Section */}
         {showAddPersonForm && (
-          <div className="bg-white rounded-lg shadow mb-8">
-            <div className="px-6 py-4 border-b flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">Agregar Nueva Persona</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Agregar Nueva Persona</h2>
+              </div>
               <button
                 onClick={() => setShowAddPersonForm(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-1"
               >
-                ✕
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
             
-            <div className="p-6">
-              <form onSubmit={handleAddPerson} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 sm:p-6">
+              <form onSubmit={handleAddPerson} className="space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Seccional</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Seccional</label>
                     <select
                       value={selectedSeccional}
                       onChange={(e) => {
@@ -582,7 +748,7 @@ const AdminPanel = () => {
                         setSelectedPromotor(''); // Reset promotor when seccional changes
                       }}
                       required
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
                     >
                       <option value="">Seleccionar Seccional</option>
                       {seccionales.map(seccional => (
@@ -594,13 +760,13 @@ const AdminPanel = () => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Promotor</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Promotor</label>
                     <select
                       value={selectedPromotor}
                       onChange={(e) => setSelectedPromotor(e.target.value)}
                       required
                       disabled={!selectedSeccional}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 transition-colors duration-200"
                     >
                       <option value="">
                         {selectedSeccional ? 'Seleccionar Promotor' : 'Primero selecciona una seccional'}
@@ -617,45 +783,51 @@ const AdminPanel = () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Nombre Completo</label>
                   <input
                     type="text"
                     value={newPerson.nombreCompleto}
                     onChange={(e) => setNewPerson({...newPerson, nombreCompleto: e.target.value})}
                     required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                    placeholder="Ingresa el nombre completo"
                   />
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">CURP</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">CURP</label>
                     <input
                       type="text"
                       value={newPerson.curp}
                       onChange={(e) => setNewPerson({...newPerson, curp: e.target.value})}
                       required
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                      placeholder="Ingresa el CURP"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Clave de Elector</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Clave de Elector</label>
                     <input
                       type="text"
                       value={newPerson.claveElector}
                       onChange={(e) => setNewPerson({...newPerson, claveElector: e.target.value})}
                       required
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                      placeholder="Ingresa la clave de elector"
                     />
                   </div>
                 </div>
                 
-                <div className="flex space-x-4 pt-4">
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium"
+                    className="flex-1 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
                   >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
                     Agregar Persona
                   </button>
                   <button
@@ -666,8 +838,11 @@ const AdminPanel = () => {
                       setSelectedSeccional('');
                       setSelectedPromotor('');
                     }}
-                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md font-medium"
+                    className="flex-1 inline-flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
                   >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                     Cancelar
                   </button>
                 </div>
@@ -678,62 +853,74 @@ const AdminPanel = () => {
 
         {/* Add User Section */}
         {showAddUserForm && (
-          <div className="bg-white rounded-lg shadow mb-8">
-            <div className="px-6 py-4 border-b flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">Agregar Nuevo Usuario</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Agregar Nuevo Usuario</h2>
+              </div>
               <button
                 onClick={() => setShowAddUserForm(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-1"
               >
-                ✕
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
             
-            <div className="p-6">
-              <form onSubmit={handleAddUser} className="space-y-4">
+            <div className="p-4 sm:p-6">
+              <form onSubmit={handleAddUser} className="space-y-4 sm:space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     type="email"
                     value={newUser.email}
                     onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                     required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
                     placeholder="usuario@ejemplo.com"
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Contraseña</label>
-                  <input
-                    type="password"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                    required
-                    minLength="6"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Mínimo 6 caracteres"
-                  />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                    <input
+                      type="password"
+                      value={newUser.password}
+                      onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                      required
+                      minLength="6"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                      placeholder="Mínimo 6 caracteres"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Confirmar Contraseña</label>
+                    <input
+                      type="password"
+                      value={newUser.confirmPassword}
+                      onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
+                      required
+                      minLength="6"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                      placeholder="Repite la contraseña"
+                    />
+                  </div>
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Confirmar Contraseña</label>
-                  <input
-                    type="password"
-                    value={newUser.confirmPassword}
-                    onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
-                    required
-                    minLength="6"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Repite la contraseña"
-                  />
-                </div>
-                
-                <div className="flex space-x-4">
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium"
+                    className="flex-1 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
                   >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
                     Crear Usuario
                   </button>
                   <button
@@ -742,8 +929,11 @@ const AdminPanel = () => {
                       setShowAddUserForm(false);
                       setNewUser({ email: '', password: '', confirmPassword: '' });
                     }}
-                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md font-medium"
+                    className="flex-1 inline-flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
                   >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                     Cancelar
                   </button>
                 </div>
@@ -821,23 +1011,35 @@ const AdminPanel = () => {
         )}
 
         {/* Search and Filter Section */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="px-6 py-4 border-b">
-            <h2 className="text-xl font-semibold text-gray-900">Buscar Personas</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Buscar Personas</h2>
+            </div>
           </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Término de búsqueda
                 </label>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar por nombre, CURP, clave, promotor o seccional..."
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar por nombre, CURP, clave, promotor o seccional..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                  />
+                </div>
               </div>
               
               <div>
@@ -847,7 +1049,7 @@ const AdminPanel = () => {
                 <select
                   value={filterBy}
                   onChange={(e) => setFilterBy(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
                 >
                   <option value="all">Todo</option>
                   <option value="nombre">Nombre</option>
@@ -863,127 +1065,201 @@ const AdminPanel = () => {
 
         {/* Resultados */}
         {getFilteredData().length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 20.5a7.962 7.962 0 01-5.657-2.343m0 0L3.515 15.33M12 6.5a7.962 7.962 0 016.484 3.343L21.314 12" />
+              </svg>
+            </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchTerm ? 'No se encontraron resultados' : 'No hay datos disponibles'}
             </h3>
-            <p className="text-gray-600">
+            <p className="text-gray-600 max-w-md mx-auto">
               {searchTerm 
-                ? 'Intenta con un término de búsqueda diferente' 
-                : 'Los datos se cargarán automáticamente cuando estén disponibles'
+                ? 'Intenta con un término de búsqueda diferente o ajusta los filtros' 
+                : 'Los datos se cargarán automáticamente cuando estén disponibles. Puedes subir un archivo Excel para comenzar.'
               }
             </p>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="mt-4 inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Limpiar búsqueda
+              </button>
+            )}
           </div>
         ) : (
           getFilteredData().map((seccional) => (
-            <div key={seccional.id} className="bg-white rounded-lg shadow mb-8">
-              <div className="px-6 py-4 border-b bg-blue-50 flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-blue-900">
-                  Seccional {seccional.numero}
-                </h2>
+            <div key={seccional.id} className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8 overflow-hidden">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-600 rounded-lg mr-3">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-semibold text-blue-900">
+                    Seccional {seccional.numero}
+                  </h2>
+                </div>
                 <button
                   onClick={() => handleDeleteSeccional(seccional.id, seccional.numero)}
-                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm font-medium flex items-center space-x-1"
+                  className="inline-flex items-center bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
                   title="Eliminar toda la seccional"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  <span>Eliminar Seccional</span>
+                  <span className="hidden sm:inline">Eliminar Seccional</span>
+                  <span className="sm:hidden">Eliminar</span>
                 </button>
               </div>
               
               {seccional.promotores && Object.entries(seccional.promotores).map(([promotorId, promotor]) => (
-                <div key={promotorId} className="border-b last:border-b-0">
-                  <div className="px-6 py-3 bg-gray-50 flex justify-between items-center">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      Promotor: {promotor.nombre}
-                      <span className="ml-2 text-sm text-gray-600">
-                        ({Object.keys(promotor.personas || {}).length} personas)
-                      </span>
-                    </h3>
+                <div key={promotorId} className="border-b border-gray-200 last:border-b-0">
+                  <div className="px-4 sm:px-6 py-3 bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+                    <div className="flex items-center">
+                      <div className="p-1.5 bg-gray-600 rounded-lg mr-3">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-base sm:text-lg font-medium text-gray-900">
+                          {promotor.nombre}
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          {Object.keys(promotor.personas || {}).length} personas registradas
+                        </p>
+                      </div>
+                    </div>
                     <button
                       onClick={() => handleDeletePromotor(seccional.id, promotorId, promotor.nombre)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs font-medium flex items-center space-x-1"
+                      className="inline-flex items-center bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors duration-200 shadow-sm"
                       title="Eliminar promotor y todas sus personas"
                     >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                      <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
-                      <span>Eliminar</span>
+                      <span className="hidden sm:inline">Eliminar</span>
                     </button>
                   </div>
                   
                   {promotor.personas && (
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              #
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Nombre Completo
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              CURP
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Clave de Elector
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Voto Listo
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Acciones
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                      <div className="min-w-full">
+                        {/* Desktop Table */}
+                        <div className="hidden lg:block">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre Completo</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CURP</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clave de Elector</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voto Listo</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {Object.entries(promotor.personas).map(([personaId, persona]) => (
+                                <tr key={personaId} className="hover:bg-gray-50 transition-colors duration-200">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{persona.numeroPersona}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{persona.nombreCompleto}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{persona.curp}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{persona.claveElector}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <button
+                                      onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
+                                      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
+                                        persona.votoListo
+                                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                          : 'bg-red-100 text-red-800 hover:bg-red-200'
+                                      }`}
+                                    >
+                                      {persona.votoListo ? (
+                                        <>
+                                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                          </svg>
+                                          Listo
+                                        </>
+                                      ) : (
+                                        <>
+                                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                          </svg>
+                                          Pendiente
+                                        </>
+                                      )}
+                                    </button>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                                    <button
+                                      onClick={() => handleEditPerson(seccional.id, promotorId, personaId, persona)}
+                                      className="text-indigo-600 hover:text-indigo-900 transition-colors duration-200"
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeletePerson(seccional.id, promotorId, personaId)}
+                                      className="text-red-600 hover:text-red-900 transition-colors duration-200"
+                                    >
+                                      Eliminar
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        
+                        {/* Mobile Cards */}
+                        <div className="lg:hidden space-y-4 p-4">
                           {Object.entries(promotor.personas).map(([personaId, persona]) => (
-                            <tr key={personaId} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {persona.numeroPersona}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {persona.nombreCompleto}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {persona.curp}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {persona.claveElector}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                            <div key={personaId} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-gray-900 text-sm">{persona.nombreCompleto}</h4>
+                                  <p className="text-xs text-gray-600">#{persona.numeroPersona}</p>
+                                </div>
                                 <button
                                   onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
-                                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
                                     persona.votoListo
                                       ? 'bg-green-100 text-green-800'
                                       : 'bg-red-100 text-red-800'
                                   }`}
                                 >
-                                  {persona.votoListo ? '✓ Listo' : '✗ Pendiente'}
+                                  {persona.votoListo ? 'Listo' : 'Pendiente'}
                                 </button>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                              </div>
+                              <div className="space-y-1 text-xs text-gray-600 mb-3">
+                                <p><span className="font-medium">CURP:</span> {persona.curp}</p>
+                                <p><span className="font-medium">Clave:</span> {persona.claveElector}</p>
+                              </div>
+                              <div className="flex space-x-3 text-xs">
                                 <button
                                   onClick={() => handleEditPerson(seccional.id, promotorId, personaId, persona)}
-                                  className="text-indigo-600 hover:text-indigo-900"
+                                  className="text-indigo-600 hover:text-indigo-900 font-medium"
                                 >
                                   Editar
                                 </button>
                                 <button
                                   onClick={() => handleDeletePerson(seccional.id, promotorId, personaId)}
-                                  className="text-red-600 hover:text-red-900"
+                                  className="text-red-600 hover:text-red-900 font-medium"
                                 >
                                   Eliminar
                                 </button>
-                              </td>
-                            </tr>
+                              </div>
+                            </div>
                           ))}
-                        </tbody>
-                      </table>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

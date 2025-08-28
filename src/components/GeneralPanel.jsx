@@ -28,6 +28,8 @@ const GeneralPanel = () => {
     curp: '',
     claveElector: ''
   });
+  const [totalVotantesDelDia, setTotalVotantesDelDia] = useState('');
+  const [diferencia, setDiferencia] = useState(null);
 
   useEffect(() => {
     // Escuchar cambios en tiempo real
@@ -248,6 +250,40 @@ const GeneralPanel = () => {
     setEditPersonData({ nombreCompleto: '', curp: '', claveElector: '' });
   };
 
+  const handleCalcularDiferencia = () => {
+    const total = parseInt(totalVotantesDelDia);
+    if (isNaN(total) || total < 0) {
+      alert('Por favor ingresa un número válido');
+      return;
+    }
+    
+    // Calcular total de votos registrados
+    let totalVotos = 0;
+    seccionales.forEach(seccional => {
+      if (seccional.promotores) {
+        Object.values(seccional.promotores).forEach(promotor => {
+          if (promotor.personas) {
+            Object.values(promotor.personas).forEach(persona => {
+              if (persona.votoListo === true) {
+                totalVotos++;
+              }
+            });
+          }
+        });
+      }
+    });
+    
+    const diff = total - totalVotos;
+    setDiferencia(diff);
+  };
+
+  const resetDiferencia = () => {
+    setTotalVotantesDelDia('');
+    setDiferencia(null);
+  };
+
+
+
   const getStats = () => {
     let totalPersonas = 0;
     let totalVotos = 0;
@@ -358,18 +394,24 @@ const GeneralPanel = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow-lg border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">Panel General</h1>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Bienvenido, {currentUser?.email}
-              </span>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 space-y-4 sm:space-y-0">
+            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Panel General</h1>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3 text-sm text-gray-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="hidden sm:inline">Bienvenido, {currentUser?.email}</span>
+              </div>
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="inline-flex items-center bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
               >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
                 Cerrar Sesión
               </button>
             </div>
@@ -695,6 +737,65 @@ const GeneralPanel = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Sección de Votantes del Día */}
+        <div className="bg-white rounded-lg shadow mb-8">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-xl font-semibold text-gray-900">Control de Votantes del Día</h2>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Total de votantes que acudieron hoy:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={totalVotantesDelDia}
+                    onChange={(e) => setTotalVotantesDelDia(e.target.value)}
+                    placeholder="Ingresa el total de votantes"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <button
+                    onClick={handleCalcularDiferencia}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Calcular
+                  </button>
+                  <button
+                    onClick={resetDiferencia}
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </div>
+              
+              {diferencia !== null && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Resultado del Análisis</h3>
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Votantes registrados en sistema:</span> {stats.totalVotos}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Total de votantes del día:</span> {totalVotantesDelDia}
+                    </p>
+                    <p className={`text-lg font-bold ${diferencia > 0 ? 'text-red-600' : diferencia < 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                      {diferencia > 0 ? 
+                        `Faltan ${diferencia} votantes por registrar` :
+                        diferencia < 0 ?
+                        `Hay ${Math.abs(diferencia)} votantes de más registrados` :
+                        'Los números coinciden perfectamente'
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

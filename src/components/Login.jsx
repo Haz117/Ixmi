@@ -7,8 +7,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [creatingUsers, setCreatingUsers] = useState(false);
-  const { login, signup } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -32,32 +31,6 @@ const Login = () => {
     }
 
     setLoading(false);
-  };
-
-  const createTestUsers = async () => {
-    setCreatingUsers(true);
-    setError('');
-    
-    try {
-      // Crear usuario admin
-      await signup('admin@ixmicheck.com', 'admin123');
-      console.log('Usuario admin creado exitosamente');
-      
-      // Crear usuario general
-      await signup('user@ixmicheck.com', 'user123');
-      console.log('Usuario general creado exitosamente');
-      
-      setError('✅ Usuarios de prueba creados exitosamente!\n\nAdmin: admin@ixmicheck.com / admin123\nGeneral: user@ixmicheck.com / user123');
-      
-    } catch (error) {
-      if (error.code === 'auth/email-already-in-use') {
-        setError('✅ Los usuarios de prueba ya existen y están listos para usar:\n\nAdmin: admin@ixmicheck.com / admin123\nGeneral: user@ixmicheck.com / user123');
-      } else {
-        setError('Error al crear usuarios: ' + error.message);
-      }
-    }
-    
-    setCreatingUsers(false);
   };
 
   return (
@@ -117,27 +90,6 @@ const Login = () => {
             {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </button>
         </form>
-
-        <div className="mt-4">
-          <button
-            onClick={createTestUsers}
-            disabled={creatingUsers || loading}
-            className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            {creatingUsers ? 'Creando usuarios...' : '🔧 Crear Usuarios de Prueba'}
-          </button>
-        </div>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600 mb-2">
-            Primera vez usando el sistema?
-          </p>
-          <p className="text-xs text-gray-500">
-            Haz clic en "Crear Usuarios de Prueba" para configurar automáticamente:<br />
-            <span className="font-medium">Admin:</span> admin@ixmicheck.com / admin123<br />
-            <span className="font-medium">General:</span> user@ixmicheck.com / user123
-          </p>
-        </div>
       </div>
     </div>
   );
