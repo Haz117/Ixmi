@@ -86,6 +86,44 @@ const GeneralPanel = () => {
     }
   };
 
+  const handleVotoToggle = async (seccionalId, promotorId, personaId, currentVoto) => {
+    try {
+      const newVoto = !currentVoto;
+      
+      if (isOnline) {
+        // Si está online, actualizar directamente en Firebase
+        const seccional = seccionales.find(s => s.id === seccionalId);
+        const updatedSeccional = { ...seccional };
+        updatedSeccional.promotores[promotorId].personas[personaId].votoListo = newVoto;
+
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        await updateDoc(seccionalRef, updatedSeccional);
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = updateVoteOffline(seccionalId, promotorId, personaId, newVoto);
+        if (!success) {
+          alert('Error al actualizar voto offline');
+          return;
+        }
+        
+        // Actualizar estado local inmediatamente para reflejar el cambio
+        setSeccionales(prevSeccionales => 
+          prevSeccionales.map(seccional => {
+            if (seccional.id === seccionalId) {
+              const updated = { ...seccional };
+              updated.promotores[promotorId].personas[personaId].votoListo = newVoto;
+              return updated;
+            }
+            return seccional;
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error al actualizar voto:', error);
+      alert('Error al actualizar voto: ' + error.message);
+    }
+  };
+
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -358,13 +396,30 @@ const GeneralPanel = () => {
                                       {persona.claveElector || 'N/A'}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                        persona.votoListo
-                                          ? 'bg-green-100 text-green-800'
-                                          : 'bg-yellow-100 text-yellow-800'
-                                      }`}>
-                                        {persona.votoListo ? 'Voto Listo' : 'Pendiente'}
-                                      </span>
+                                      <button
+                                        onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
+                                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer ${
+                                          persona.votoListo
+                                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                            : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                                        }`}
+                                      >
+                                        {persona.votoListo ? (
+                                          <>
+                                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Voto Listo
+                                          </>
+                                        ) : (
+                                          <>
+                                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Pendiente
+                                          </>
+                                        )}
+                                      </button>
                                     </td>
                                   </tr>
                                 ))}
