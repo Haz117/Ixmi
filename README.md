@@ -80,13 +80,26 @@ npm run dev
 
 El archivo Excel debe tener la siguiente estructura:
 
+**Campos requeridos:**
+- Número de seccional en la primera fila
+- Nombre completo (obligatorio)
+- Promotor (obligatorio)
+
+**Campos opcionales:**
+- CURP (puede estar vacío)
+- Clave de Elector (puede estar vacío)
+
 ```
 SECCIONAL 0591
 No Total.	No. Promotor	Nombre Completo	CURP	Clave de Elector	Promotor
 1	1	MENDOZA PEDRAZA ANAIN	MEPA840202MHGNDN09	MNPDAN84020213M200	ABDIEL
 2	2	PEDRAZA CORONA BRIGIDA	PECB621015MHGDRR16	PDCRBR62101513M000	ABDIEL
+3	3	RAMIREZ LOPEZ MARIA		RLPMRA80051213M600	ABDIEL
+4	4	GONZALEZ TORRES JUAN			ABDIEL
 ...
 ```
+
+**Nota:** Como se puede ver en el ejemplo, las filas 3 y 4 muestran que es posible tener CURP y/o Clave de Elector vacíos. Solo el nombre completo y el promotor son obligatorios.
 
 ## Credenciales de Prueba
 
