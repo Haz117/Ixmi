@@ -57,17 +57,52 @@ const GeneralPanel = () => {
       // Verificar si el usuario es admin
       const isAdmin = currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com';
       
+      let filteredData;
       if (isAdmin) {
         // Los admin pueden ver todas las seccionales
-        setSeccionales(data);
+        filteredData = data;
       } else {
         // Los usuarios generales solo ven las seccionales que subieron ellos
-        const userSeccionales = data.filter(seccional => 
+        filteredData = data.filter(seccional => 
           seccional.subidoPor === currentUser?.email
         );
-        setSeccionales(userSeccionales);
       }
+      
+      setSeccionales(filteredData);
       setLoading(false);
+
+      // Calcular estadísticas solo para las seccionales filtradas
+      let totalPersonas = 0;
+      let totalVotos = 0;
+      const promotoresStats = {};
+
+      filteredData.forEach(seccional => {
+        if (seccional.promotores) {
+          Object.entries(seccional.promotores).forEach(([, promotor]) => {
+            if (!promotoresStats[promotor.nombre]) {
+              promotoresStats[promotor.nombre] = {
+                totalPersonas: 0,
+                totalVotos: 0
+              };
+            }
+            
+            if (promotor.personas) {
+              const personas = Object.values(promotor.personas);
+              promotoresStats[promotor.nombre].totalPersonas += personas.length;
+              promotoresStats[promotor.nombre].totalVotos += personas.filter(p => p.votoListo).length;
+              
+              totalPersonas += personas.length;
+              totalVotos += personas.filter(p => p.votoListo).length;
+            }
+          });
+        }
+      });
+
+      setStats({
+        totalPersonas,
+        totalVotos,
+        promotores: promotoresStats
+      });
     });
 
     return () => {
@@ -145,6 +180,21 @@ const GeneralPanel = () => {
         })
       );
     }
+  };
+
+  const handleCalcularDiferencia = () => {
+    const total = parseInt(totalVotantesDelDia);
+    if (isNaN(total) || total < 0) {
+      alert('Por favor ingresa un número válido');
+      return;
+    }
+    const diff = total - stats.totalVotos;
+    setDiferencia(diff);
+  };
+
+  const resetDiferencia = () => {
+    setTotalVotantesDelDia('');
+    setDiferencia(null);
   };
 
   const handleFileUpload = async (event) => {
@@ -318,6 +368,187 @@ const GeneralPanel = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Sección de Votantes del Día */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Control de Votantes del Día</h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <div className="space-y-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  Total de votantes que acudieron hoy:
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="number"
+                    value={totalVotantesDelDia}
+                    onChange={(e) => setTotalVotantesDelDia(e.target.value)}
+                    placeholder="Ingresa el total de votantes"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCalcularDiferencia}
+                      className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      Calcular
+                    </button>
+                    <button
+                      onClick={resetDiferencia}
+                      className="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Limpiar
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              {diferencia !== null && (
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 rounded-xl border border-gray-200">
+                  <div className="flex items-center mb-3">
+                    <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-gray-900">Resultado del Análisis</h3>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Registrados</p>
+                        <p className="text-lg font-bold text-blue-600">{stats.totalVotos}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Total del día</p>
+                        <p className="text-lg font-bold text-green-600">{totalVotantesDelDia}</p>
+                      </div>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg">
+                      <p className={`text-base sm:text-lg font-bold text-center ${diferencia > 0 ? 'text-red-600' : diferencia < 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {diferencia > 0 ? 
+                          `Faltan ${diferencia} votantes por registrar` :
+                          diferencia < 0 ?
+                          `Hay ${Math.abs(diferencia)} votantes de más registrados` :
+                          'Los números coinciden perfectamente'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Estadísticas */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Total Afiliados</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-blue-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Asistió a Votar</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.totalVotos}</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-green-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200 sm:col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Porcentaje</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-purple-600">
+                  {stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%
+                </p>
+              </div>
+              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Estadísticas por Promotor */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas por Promotor</h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            {Object.keys(stats.promotores).length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {Object.entries(stats.promotores).map(([nombre, data]) => (
+                  <div key={nombre} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow duration-200">
+                    <h4 className="font-semibold text-gray-900 text-base sm:text-lg mb-2">{nombre}</h4>
+                    <div className="space-y-1">
+                      <p className="text-sm sm:text-base text-gray-600">
+                        <span className="font-medium">Personas:</span> {data.totalPersonas}
+                      </p>
+                      <p className="text-sm sm:text-base text-gray-600">
+                        <span className="font-medium">Votos:</span> {data.totalVotos}
+                      </p>
+                    </div>
+                    <div className="mt-3">
+                      <div className="flex justify-between text-sm text-gray-600 mb-1">
+                        <span>Progreso</span>
+                        <span>{data.totalPersonas > 0 ? Math.round((data.totalVotos / data.totalPersonas) * 100) : 0}%</span>
+                      </div>
+                      <div className="bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ 
+                            width: `${data.totalPersonas > 0 ? (data.totalVotos / data.totalPersonas) * 100 : 0}%` 
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <p className="text-lg font-medium">No hay promotores registrados</p>
+                <p className="text-sm">Sube un archivo Excel para ver las estadísticas por promotor</p>
+              </div>
+            )}
           </div>
         </div>
 
