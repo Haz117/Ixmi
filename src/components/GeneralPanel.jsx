@@ -29,6 +29,7 @@ const GeneralPanel = () => {
   const [selectedPromotor, setSelectedPromotor] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all'); // all, promotor, seccional
+  const [sortBy, setSortBy] = useState('default'); // default, alphabetical-asc, alphabetical-desc, number-asc, number-desc, newest, oldest
   const [editingPerson, setEditingPerson] = useState(null);
   const [editPersonData, setEditPersonData] = useState({
     nombreCompleto: '',
@@ -107,8 +108,8 @@ const GeneralPanel = () => {
         }
 
         // Procesar filas de datos - Solo requiere nombre completo
-        if (row.length >= 3 && row[1] && row[2]) {
-          const numeroPersona = row[1];
+        // Ignoramos la columna 1 (número del promotor) y usamos las siguientes columnas
+        if (row.length >= 3 && row[2]) { // row[2] es el nombre completo
           const nombreCompleto = row[2];
           const curp = row[3] || ''; // CURP opcional
           const claveElector = row[4] || ''; // Clave de Elector opcional
@@ -123,6 +124,9 @@ const GeneralPanel = () => {
               personas: {}
             };
           }
+
+          // Generar número secuencial automáticamente para cada promotor
+          const numeroPersona = Object.keys(promotoresData[promotor].personas).length + 1;
 
           promotoresData[promotor].personas[`persona_${numeroPersona}`] = {
             numeroPersona,
@@ -233,7 +237,8 @@ const GeneralPanel = () => {
         updatedSeccional.promotores[selectedPromotor].personas[personId] = {
           ...newPerson,
           votoListo: false,
-          numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1
+          numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1,
+          fechaCreacion: new Date().toISOString()
         };
         
         await updateDoc(seccionalRef, updatedSeccional);
@@ -259,7 +264,8 @@ const GeneralPanel = () => {
               updated.promotores[selectedPromotor].personas[personId] = {
                 ...newPerson,
                 votoListo: false,
-                numeroPersona: Object.keys(updated.promotores[selectedPromotor].personas).length + 1
+                numeroPersona: Object.keys(updated.promotores[selectedPromotor].personas).length + 1,
+                fechaCreacion: new Date().toISOString()
               };
               
               return updated;
@@ -468,6 +474,56 @@ const GeneralPanel = () => {
     return { totalPersonas, totalVotos, promotores: promotoresStats };
   };
 
+  // Función para ordenar personas según el criterio seleccionado
+  const sortPersonas = (personas) => {
+    const personasArray = Object.entries(personas).map(([id, persona]) => ({ id, ...persona }));
+    
+    switch (sortBy) {
+      case 'alphabetical-asc':
+        return personasArray.sort((a, b) => {
+          const nameA = (a.nombreCompleto || '').toString().toLowerCase();
+          const nameB = (b.nombreCompleto || '').toString().toLowerCase();
+          return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+        });
+      case 'alphabetical-desc':
+        return personasArray.sort((a, b) => {
+          const nameA = (a.nombreCompleto || '').toString().toLowerCase();
+          const nameB = (b.nombreCompleto || '').toString().toLowerCase();
+          return nameB.localeCompare(nameA, 'es', { sensitivity: 'base' });
+        });
+      case 'number-asc':
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numA - numB;
+        });
+      case 'number-desc':
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numB - numA;
+        });
+      case 'newest':
+        return personasArray.sort((a, b) => {
+          const dateA = a.fechaCreacion ? new Date(a.fechaCreacion) : new Date(0);
+          const dateB = b.fechaCreacion ? new Date(b.fechaCreacion) : new Date(0);
+          return dateB - dateA;
+        });
+      case 'oldest':
+        return personasArray.sort((a, b) => {
+          const dateA = a.fechaCreacion ? new Date(a.fechaCreacion) : new Date(0);
+          const dateB = b.fechaCreacion ? new Date(b.fechaCreacion) : new Date(0);
+          return dateA - dateB;
+        });
+      default:
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numA - numB;
+        });
+    }
+  };
+
   // Función para filtrar personas basada en el término de búsqueda
   const filterPersonas = (personas, promotorNombre, seccionalNumero) => {
     if (!searchTerm) return personas;
@@ -574,6 +630,65 @@ const GeneralPanel = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Sección de Votantes del Día */}
+        <div className="bg-white rounded-lg shadow mb-8">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-xl font-semibold text-gray-900">Control de Votantes del Día</h2>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Total de votantes que acudieron hoy:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={totalVotantesDelDia}
+                    onChange={(e) => setTotalVotantesDelDia(e.target.value)}
+                    placeholder="Ingresa el total de votantes"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <button
+                    onClick={handleCalcularDiferencia}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Calcular
+                  </button>
+                  <button
+                    onClick={resetDiferencia}
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </div>
+              
+              {diferencia !== null && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Resultado del Análisis</h3>
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Votantes registrados en sistema:</span> {stats.totalVotos}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Total de votantes del día:</span> {totalVotantesDelDia}
+                    </p>
+                    <p className={`text-lg font-bold ${diferencia > 0 ? 'text-red-600' : diferencia < 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                      {diferencia > 0 ? 
+                        `Faltan ${diferencia} votantes por registrar` :
+                        diferencia < 0 ?
+                        `Hay ${Math.abs(diferencia)} votantes de más registrados` :
+                        'Los números coinciden perfectamente'
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Upload Section */}
         <div className="bg-white rounded-lg shadow mb-8">
           <div className="px-6 py-4 border-b">
@@ -638,7 +753,7 @@ const GeneralPanel = () => {
             <h2 className="text-xl font-semibold text-gray-900">Buscar Personas</h2>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Término de búsqueda
@@ -667,6 +782,25 @@ const GeneralPanel = () => {
                   <option value="clave">Clave de Elector</option>
                   <option value="promotor">Promotor</option>
                   <option value="seccional">Seccional</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ordenar por
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="default">Por defecto (Número)</option>
+                  <option value="alphabetical-asc">Alfabético A-Z</option>
+                  <option value="alphabetical-desc">Alfabético Z-A</option>
+                  <option value="number-asc">Número (menor a mayor)</option>
+                  <option value="number-desc">Número (mayor a menor)</option>
+                  <option value="newest">Más recientes primero</option>
+                  <option value="oldest">Más antiguos primero</option>
                 </select>
               </div>
             </div>
@@ -912,65 +1046,6 @@ const GeneralPanel = () => {
           </div>
         </div>
 
-        {/* Sección de Votantes del Día */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="px-6 py-4 border-b">
-            <h2 className="text-xl font-semibold text-gray-900">Control de Votantes del Día</h2>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Total de votantes que acudieron hoy:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={totalVotantesDelDia}
-                    onChange={(e) => setTotalVotantesDelDia(e.target.value)}
-                    placeholder="Ingresa el total de votantes"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <button
-                    onClick={handleCalcularDiferencia}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-                  >
-                    Calcular
-                  </button>
-                  <button
-                    onClick={resetDiferencia}
-                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-                  >
-                    Limpiar
-                  </button>
-                </div>
-              </div>
-              
-              {diferencia !== null && (
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Resultado del Análisis</h3>
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Votantes registrados en sistema:</span> {stats.totalVotos}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Total de votantes del día:</span> {totalVotantesDelDia}
-                    </p>
-                    <p className={`text-lg font-bold ${diferencia > 0 ? 'text-red-600' : diferencia < 0 ? 'text-green-600' : 'text-gray-600'}`}>
-                      {diferencia > 0 ? 
-                        `Faltan ${diferencia} votantes por registrar` :
-                        diferencia < 0 ?
-                        `Hay ${Math.abs(diferencia)} votantes de más registrados` :
-                        'Los números coinciden perfectamente'
-                      }
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Datos por Seccional */}
         {getFilteredData().map((seccional) => (
           <div key={seccional.id} className="bg-white rounded-lg shadow mb-6">
@@ -1026,8 +1101,8 @@ const GeneralPanel = () => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {Object.entries(promotor.personas).map(([personaId, persona], index) => (
-                            <tr key={personaId} className={persona.votoListo ? 'bg-green-50' : ''}>
+                          {sortPersonas(promotor.personas).map((persona, index) => (
+                            <tr key={persona.id} className={persona.votoListo ? 'bg-green-50' : ''}>
                               <td className="px-4 py-2 text-sm text-gray-900">{index + 1}</td>
                               <td className="px-4 py-2 text-sm text-gray-900">
                                 <span className={searchTerm && filterBy === 'nombre' && persona.nombreCompleto?.toLowerCase().includes(searchTerm.toLowerCase()) 
@@ -1049,7 +1124,7 @@ const GeneralPanel = () => {
                               </td>
                               <td className="px-4 py-2 text-sm">
                                 <button
-                                  onClick={() => toggleVoto(seccional.id, promotorId, personaId, persona.votoListo)}
+                                  onClick={() => toggleVoto(seccional.id, promotorId, persona.id, persona.votoListo)}
                                   className={`px-3 py-1 rounded-full text-xs font-medium ${
                                     persona.votoListo
                                       ? 'bg-green-100 text-green-800 hover:bg-green-200'
@@ -1062,13 +1137,13 @@ const GeneralPanel = () => {
                               <td className="px-4 py-2 text-sm">
                                 <div className="flex space-x-2">
                                   <button
-                                    onClick={() => handleEditPerson(seccional.id, promotorId, personaId, persona)}
+                                    onClick={() => handleEditPerson(seccional.id, promotorId, persona.id, persona)}
                                     className="bg-blue-100 text-blue-800 hover:bg-blue-200 px-2 py-1 rounded text-xs font-medium"
                                   >
                                     ✏️ Editar
                                   </button>
                                   <button
-                                    onClick={() => handleDeletePerson(seccional.id, promotorId, personaId, persona.nombreCompleto)}
+                                    onClick={() => handleDeletePerson(seccional.id, promotorId, persona.id, persona.nombreCompleto)}
                                     className="bg-red-100 text-red-800 hover:bg-red-200 px-2 py-1 rounded text-xs font-medium"
                                   >
                                     🗑️ Eliminar

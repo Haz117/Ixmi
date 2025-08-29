@@ -23,6 +23,7 @@ const AdminPanel = () => {
   const [selectedPromotor, setSelectedPromotor] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all'); // all, promotor, seccional
+  const [sortBy, setSortBy] = useState('default'); // default, alphabetical-asc, alphabetical-desc, number-asc, number-desc, newest, oldest
   const [editingPerson, setEditingPerson] = useState(null);
   const [editPersonData, setEditPersonData] = useState({
     nombreCompleto: '',
@@ -256,7 +257,8 @@ const AdminPanel = () => {
       updatedSeccional.promotores[selectedPromotor].personas[personaId] = {
         ...newPerson,
         votoListo: false,
-        numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1
+        numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1,
+        fechaCreacion: new Date().toISOString()
       };
       
       const seccionalRef = doc(db, 'seccionales', selectedSeccional);
@@ -271,6 +273,56 @@ const AdminPanel = () => {
     } catch (error) {
       console.error('Error al agregar persona:', error);
       alert('Error al agregar persona: ' + error.message);
+    }
+  };
+
+  // Función para ordenar personas según el criterio seleccionado
+  const sortPersonas = (personas) => {
+    const personasArray = Object.entries(personas).map(([id, persona]) => ({ id, ...persona }));
+    
+    switch (sortBy) {
+      case 'alphabetical-asc':
+        return personasArray.sort((a, b) => {
+          const nameA = (a.nombreCompleto || '').toString().toLowerCase();
+          const nameB = (b.nombreCompleto || '').toString().toLowerCase();
+          return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+        });
+      case 'alphabetical-desc':
+        return personasArray.sort((a, b) => {
+          const nameA = (a.nombreCompleto || '').toString().toLowerCase();
+          const nameB = (b.nombreCompleto || '').toString().toLowerCase();
+          return nameB.localeCompare(nameA, 'es', { sensitivity: 'base' });
+        });
+      case 'number-asc':
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numA - numB;
+        });
+      case 'number-desc':
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numB - numA;
+        });
+      case 'newest':
+        return personasArray.sort((a, b) => {
+          const dateA = a.fechaCreacion ? new Date(a.fechaCreacion) : new Date(0);
+          const dateB = b.fechaCreacion ? new Date(b.fechaCreacion) : new Date(0);
+          return dateB - dateA;
+        });
+      case 'oldest':
+        return personasArray.sort((a, b) => {
+          const dateA = a.fechaCreacion ? new Date(a.fechaCreacion) : new Date(0);
+          const dateB = b.fechaCreacion ? new Date(b.fechaCreacion) : new Date(0);
+          return dateA - dateB;
+        });
+      default:
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numA - numB;
+        });
     }
   };
 
@@ -686,7 +738,7 @@ const AdminPanel = () => {
             <h2 className="text-xl font-semibold text-gray-900">Buscar Personas</h2>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Término de búsqueda
@@ -715,6 +767,25 @@ const AdminPanel = () => {
                   <option value="clave">Clave de Elector</option>
                   <option value="promotor">Promotor</option>
                   <option value="seccional">Seccional</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ordenar por
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="default">Por defecto (Número)</option>
+                  <option value="alphabetical-asc">Alfabético A-Z</option>
+                  <option value="alphabetical-desc">Alfabético Z-A</option>
+                  <option value="number-asc">Número (menor a mayor)</option>
+                  <option value="number-desc">Número (mayor a menor)</option>
+                  <option value="newest">Más recientes primero</option>
+                  <option value="oldest">Más antiguos primero</option>
                 </select>
               </div>
             </div>
@@ -795,8 +866,8 @@ const AdminPanel = () => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {Object.entries(promotor.personas).map(([personaId, persona]) => (
-                            <tr key={personaId} className="hover:bg-gray-50">
+                          {sortPersonas(promotor.personas).map((persona) => (
+                            <tr key={persona.id} className="hover:bg-gray-50">
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {persona.numeroPersona}
                               </td>
@@ -811,7 +882,7 @@ const AdminPanel = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <button
-                                  onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
+                                  onClick={() => handleVotoToggle(seccional.id, promotorId, persona.id, persona.votoListo)}
                                   className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
                                     persona.votoListo
                                       ? 'bg-green-100 text-green-800'
@@ -823,13 +894,13 @@ const AdminPanel = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                 <button
-                                  onClick={() => handleEditPerson(seccional.id, promotorId, personaId, persona)}
+                                  onClick={() => handleEditPerson(seccional.id, promotorId, persona.id, persona)}
                                   className="text-indigo-600 hover:text-indigo-900"
                                 >
                                   Editar
                                 </button>
                                 <button
-                                  onClick={() => handleDeletePerson(seccional.id, promotorId, personaId)}
+                                  onClick={() => handleDeletePerson(seccional.id, promotorId, persona.id)}
                                   className="text-red-600 hover:text-red-900"
                                 >
                                   Eliminar

@@ -26,6 +26,7 @@ const AdminPanel = () => {
   const [uploading, setUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all');
+  const [sortBy, setSortBy] = useState('default'); // default, alphabetical-asc, alphabetical-desc, number-asc, number-desc, newest, oldest
   const [showEditPersonForm, setShowEditPersonForm] = useState(false);
   const [showAddPersonForm, setShowAddPersonForm] = useState(false);
   const [showAddUserForm, setShowAddUserForm] = useState(false);
@@ -358,7 +359,8 @@ const AdminPanel = () => {
       updatedSeccional.promotores[selectedPromotor].personas[personaId] = {
         ...newPerson,
         votoListo: false,
-        numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1
+        numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1,
+        fechaCreacion: new Date().toISOString()
       };
       
       const seccionalRef = doc(db, 'seccionales', selectedSeccional);
@@ -373,6 +375,56 @@ const AdminPanel = () => {
     } catch (error) {
       console.error('Error al agregar persona:', error);
       alert('Error al agregar persona: ' + error.message);
+    }
+  };
+
+  // Función para ordenar personas según el criterio seleccionado
+  const sortPersonas = (personas) => {
+    const personasArray = Object.entries(personas).map(([id, persona]) => ({ id, ...persona }));
+    
+    switch (sortBy) {
+      case 'alphabetical-asc':
+        return personasArray.sort((a, b) => {
+          const nameA = (a.nombreCompleto || '').toString().toLowerCase();
+          const nameB = (b.nombreCompleto || '').toString().toLowerCase();
+          return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+        });
+      case 'alphabetical-desc':
+        return personasArray.sort((a, b) => {
+          const nameA = (a.nombreCompleto || '').toString().toLowerCase();
+          const nameB = (b.nombreCompleto || '').toString().toLowerCase();
+          return nameB.localeCompare(nameA, 'es', { sensitivity: 'base' });
+        });
+      case 'number-asc':
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numA - numB;
+        });
+      case 'number-desc':
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numB - numA;
+        });
+      case 'newest':
+        return personasArray.sort((a, b) => {
+          const dateA = a.fechaCreacion ? new Date(a.fechaCreacion) : new Date(0);
+          const dateB = b.fechaCreacion ? new Date(b.fechaCreacion) : new Date(0);
+          return dateB - dateA;
+        });
+      case 'oldest':
+        return personasArray.sort((a, b) => {
+          const dateA = a.fechaCreacion ? new Date(a.fechaCreacion) : new Date(0);
+          const dateB = b.fechaCreacion ? new Date(b.fechaCreacion) : new Date(0);
+          return dateA - dateB;
+        });
+      default:
+        return personasArray.sort((a, b) => {
+          const numA = parseInt(a.numeroPersona) || 0;
+          const numB = parseInt(b.numeroPersona) || 0;
+          return numA - numB;
+        });
     }
   };
 
@@ -575,94 +627,6 @@ const AdminPanel = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Estadísticas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Total Afiliados</h3>
-                <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
-              </div>
-              <div className="p-2 sm:p-3 bg-blue-100 rounded-full">
-                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Asistió a Votar</h3>
-                <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.totalVotos}</p>
-              </div>
-              <div className="p-2 sm:p-3 bg-green-100 rounded-full">
-                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200 sm:col-span-2 lg:col-span-1">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Porcentaje</h3>
-                <p className="text-2xl sm:text-3xl font-bold text-purple-600">
-                  {stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%
-                </p>
-              </div>
-              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
-                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Estadísticas por Promotor */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas por Promotor</h2>
-            </div>
-          </div>
-          <div className="p-4 sm:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {Object.entries(stats.promotores).map(([nombre, data]) => (
-                <div key={nombre} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow duration-200">
-                  <h4 className="font-semibold text-gray-900 text-sm sm:text-base mb-2">{nombre}</h4>
-                  <div className="space-y-1">
-                    <p className="text-xs sm:text-sm text-gray-600">
-                      <span className="font-medium">Personas:</span> {data.totalPersonas}
-                    </p>
-                    <p className="text-xs sm:text-sm text-gray-600">
-                      <span className="font-medium">Votos:</span> {data.totalVotos}
-                    </p>
-                  </div>
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-gray-600 mb-1">
-                      <span>Progreso</span>
-                      <span>{data.totalPersonas > 0 ? Math.round((data.totalVotos / data.totalPersonas) * 100) : 0}%</span>
-                    </div>
-                    <div className="bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ 
-                          width: `${data.totalPersonas > 0 ? (data.totalVotos / data.totalPersonas) * 100 : 0}%` 
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
         {/* Sección de Votantes del Día */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
@@ -746,6 +710,93 @@ const AdminPanel = () => {
           </div>
         </div>
 
+        {/* Estadísticas */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Total Afiliados</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-blue-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Asistió a Votar</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.totalVotos}</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-green-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200 sm:col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Porcentaje</h3>
+                <p className="text-2xl sm:text-3xl font-bold text-purple-600">
+                  {stats.totalPersonas > 0 ? Math.round((stats.totalVotos / stats.totalPersonas) * 100) : 0}%
+                </p>
+              </div>
+              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
+                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Estadísticas por Promotor */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas por Promotor</h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {Object.entries(stats.promotores).map(([nombre, data]) => (
+                <div key={nombre} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow duration-200">
+                  <h4 className="font-semibold text-gray-900 text-base sm:text-lg mb-2">{nombre}</h4>
+                  <div className="space-y-1">
+                    <p className="text-sm sm:text-base text-gray-600">
+                      <span className="font-medium">Personas:</span> {data.totalPersonas}
+                    </p>
+                    <p className="text-sm sm:text-base text-gray-600">
+                      <span className="font-medium">Votos:</span> {data.totalVotos}
+                    </p>
+                  </div>
+                  <div className="mt-3">
+                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                      <span>Progreso</span>
+                      <span>{data.totalPersonas > 0 ? Math.round((data.totalVotos / data.totalPersonas) * 100) : 0}%</span>
+                    </div>
+                    <div className="bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ 
+                          width: `${data.totalPersonas > 0 ? (data.totalVotos / data.totalPersonas) * 100 : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* Upload Status */}
         {uploading && (
@@ -765,28 +816,38 @@ const AdminPanel = () => {
           </div>
         )}
 
-        {/* Add Person Section */}
+        {/* Add Person Modal */}
         {showAddPersonForm && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
-            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex justify-between items-center">
-              <div className="flex items-center">
-                <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                </svg>
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Agregar Nueva Persona</h2>
+          <div 
+            className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowAddPersonForm(false);
+                setNewPerson({ nombreCompleto: '', curp: '', claveElector: '' });
+                setSelectedSeccional('');
+                setSelectedPromotor('');
+              }
+            }}
+          >
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+                  <svg className="w-6 h-6 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  Agregar Nueva Persona
+                </h3>
+                <button
+                  onClick={() => setShowAddPersonForm(false)}
+                  className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <button
-                onClick={() => setShowAddPersonForm(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-4 sm:p-6">
-              <form onSubmit={handleAddPerson} className="space-y-4 sm:space-y-6">
+              
+              <form onSubmit={handleAddPerson} className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Seccional</label>
@@ -867,12 +928,12 @@ const AdminPanel = () => {
                   </div>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
                   <button
                     type="submit"
-                    className="flex-1 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
+                    className="flex-1 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-colors duration-200"
                   >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                     Agregar Persona
@@ -885,9 +946,9 @@ const AdminPanel = () => {
                       setSelectedSeccional('');
                       setSelectedPromotor('');
                     }}
-                    className="flex-1 inline-flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
+                    className="flex-1 inline-flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg font-medium transition-colors duration-200"
                   >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                     Cancelar
@@ -898,28 +959,36 @@ const AdminPanel = () => {
           </div>
         )}
 
-        {/* Add User Section */}
+        {/* Add User Modal */}
         {showAddUserForm && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
-            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex justify-between items-center">
-              <div className="flex items-center">
-                <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                </svg>
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Agregar Nuevo Usuario</h2>
+          <div 
+            className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowAddUserForm(false);
+                setNewUser({ email: '', password: '', confirmPassword: '' });
+              }
+            }}
+          >
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+                  <svg className="w-6 h-6 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  Agregar Nuevo Usuario
+                </h3>
+                <button
+                  onClick={() => setShowAddUserForm(false)}
+                  className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <button
-                onClick={() => setShowAddUserForm(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-4 sm:p-6">
-              <form onSubmit={handleAddUser} className="space-y-4 sm:space-y-6">
+              
+              <form onSubmit={handleAddUser} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
@@ -932,7 +1001,7 @@ const AdminPanel = () => {
                   />
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
                     <input
@@ -960,12 +1029,12 @@ const AdminPanel = () => {
                   </div>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
                   <button
                     type="submit"
-                    className="flex-1 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
+                    className="flex-1 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-colors duration-200"
                   >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                     Crear Usuario
@@ -976,9 +1045,9 @@ const AdminPanel = () => {
                       setShowAddUserForm(false);
                       setNewUser({ email: '', password: '', confirmPassword: '' });
                     }}
-                    className="flex-1 inline-flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
+                    className="flex-1 inline-flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg font-medium transition-colors duration-200"
                   >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                     Cancelar
@@ -1068,7 +1137,7 @@ const AdminPanel = () => {
             </div>
           </div>
           <div className="p-4 sm:p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Término de búsqueda
@@ -1104,6 +1173,25 @@ const AdminPanel = () => {
                   <option value="clave">Clave de Elector</option>
                   <option value="promotor">Promotor</option>
                   <option value="seccional">Seccional</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ordenar por
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                >
+                  <option value="default">Por defecto (Número)</option>
+                  <option value="alphabetical-asc">Alfabético A-Z</option>
+                  <option value="alphabetical-desc">Alfabético Z-A</option>
+                  <option value="number-asc">Número (menor a mayor)</option>
+                  <option value="number-desc">Número (mayor a menor)</option>
+                  <option value="newest">Más recientes primero</option>
+                  <option value="oldest">Más antiguos primero</option>
                 </select>
               </div>
             </div>
@@ -1189,10 +1277,10 @@ const AdminPanel = () => {
                         </svg>
                       </div>
                       <div>
-                        <h3 className="text-base sm:text-lg font-medium text-gray-900">
+                        <h3 className="text-lg sm:text-xl font-medium text-gray-900">
                           {promotor.nombre}
                         </h3>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm sm:text-base text-gray-600">
                           {Object.keys(promotor.personas || {}).length} personas registradas
                         </p>
                       </div>
@@ -1226,15 +1314,15 @@ const AdminPanel = () => {
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                              {Object.entries(promotor.personas).map(([personaId, persona]) => (
-                                <tr key={personaId} className="hover:bg-gray-50 transition-colors duration-200">
+                              {sortPersonas(promotor.personas).map((persona) => (
+                                <tr key={persona.id} className="hover:bg-gray-50 transition-colors duration-200">
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{persona.numeroPersona}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{persona.nombreCompleto}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{persona.curp}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{persona.claveElector}</td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <button
-                                      onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
+                                      onClick={() => handleVotoToggle(seccional.id, promotorId, persona.id, persona.votoListo)}
                                       className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
                                         persona.votoListo
                                           ? 'bg-green-100 text-green-800 hover:bg-green-200'
@@ -1260,13 +1348,13 @@ const AdminPanel = () => {
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                                     <button
-                                      onClick={() => handleEditPerson(seccional.id, promotorId, personaId, persona)}
+                                      onClick={() => handleEditPerson(seccional.id, promotorId, persona.id, persona)}
                                       className="text-indigo-600 hover:text-indigo-900 transition-colors duration-200"
                                     >
                                       Editar
                                     </button>
                                     <button
-                                      onClick={() => handleDeletePerson(seccional.id, promotorId, personaId)}
+                                      onClick={() => handleDeletePerson(seccional.id, promotorId, persona.id)}
                                       className="text-red-600 hover:text-red-900 transition-colors duration-200"
                                     >
                                       Eliminar
@@ -1280,16 +1368,16 @@ const AdminPanel = () => {
                         
                         {/* Mobile Cards */}
                         <div className="lg:hidden space-y-4 p-4">
-                          {Object.entries(promotor.personas).map(([personaId, persona]) => (
-                            <div key={personaId} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                          {sortPersonas(promotor.personas).map((persona) => (
+                            <div key={persona.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                               <div className="flex justify-between items-start mb-3">
                                 <div className="flex-1">
-                                  <h4 className="font-medium text-gray-900 text-sm">{persona.nombreCompleto}</h4>
-                                  <p className="text-xs text-gray-600">#{persona.numeroPersona}</p>
+                                  <h4 className="font-medium text-gray-900 text-base">{persona.nombreCompleto}</h4>
+                                  <p className="text-sm text-gray-600">#{persona.numeroPersona}</p>
                                 </div>
                                 <button
-                                  onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
-                                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
+                                  onClick={() => handleVotoToggle(seccional.id, promotorId, persona.id, persona.votoListo)}
+                                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${
                                     persona.votoListo
                                       ? 'bg-green-100 text-green-800'
                                       : 'bg-red-100 text-red-800'
@@ -1298,19 +1386,19 @@ const AdminPanel = () => {
                                   {persona.votoListo ? 'Listo' : 'Pendiente'}
                                 </button>
                               </div>
-                              <div className="space-y-1 text-xs text-gray-600 mb-3">
+                              <div className="space-y-1 text-sm text-gray-600 mb-3">
                                 <p><span className="font-medium">CURP:</span> {persona.curp}</p>
                                 <p><span className="font-medium">Clave:</span> {persona.claveElector}</p>
                               </div>
-                              <div className="flex space-x-3 text-xs">
+                              <div className="flex space-x-3 text-sm">
                                 <button
-                                  onClick={() => handleEditPerson(seccional.id, promotorId, personaId, persona)}
+                                  onClick={() => handleEditPerson(seccional.id, promotorId, persona.id, persona)}
                                   className="text-indigo-600 hover:text-indigo-900 font-medium"
                                 >
                                   Editar
                                 </button>
                                 <button
-                                  onClick={() => handleDeletePerson(seccional.id, promotorId, personaId)}
+                                  onClick={() => handleDeletePerson(seccional.id, promotorId, persona.id)}
                                   className="text-red-600 hover:text-red-900 font-medium"
                                 >
                                   Eliminar
