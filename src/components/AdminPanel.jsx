@@ -209,6 +209,18 @@ const AdminPanel = () => {
     try {
       const newVoto = !currentVoto;
       
+      // Actualizar estado local inmediatamente para reflejar el cambio (optimistic update)
+      setSeccionales(prevSeccionales => 
+        prevSeccionales.map(seccional => {
+          if (seccional.id === seccionalId) {
+            const updated = { ...seccional };
+            updated.promotores[promotorId].personas[personaId].votoListo = newVoto;
+            return updated;
+          }
+          return seccional;
+        })
+      );
+      
       if (isOnline) {
         // Si está online, actualizar directamente en Firebase
         const seccional = seccionales.find(s => s.id === seccionalId);
@@ -222,24 +234,35 @@ const AdminPanel = () => {
         const success = updateVoteOffline(seccionalId, promotorId, personaId, newVoto);
         if (!success) {
           alert('Error al actualizar voto offline');
+          // Revertir el cambio optimista en caso de error
+          setSeccionales(prevSeccionales => 
+            prevSeccionales.map(seccional => {
+              if (seccional.id === seccionalId) {
+                const reverted = { ...seccional };
+                reverted.promotores[promotorId].personas[personaId].votoListo = currentVoto;
+                return reverted;
+              }
+              return seccional;
+            })
+          );
           return;
         }
-        
-        // Actualizar estado local inmediatamente para reflejar el cambio
-        setSeccionales(prevSeccionales => 
-          prevSeccionales.map(seccional => {
-            if (seccional.id === seccionalId) {
-              const updated = { ...seccional };
-              updated.promotores[promotorId].personas[personaId].votoListo = newVoto;
-              return updated;
-            }
-            return seccional;
-          })
-        );
       }
     } catch (error) {
       console.error('Error al actualizar voto:', error);
       alert('Error al actualizar voto: ' + error.message);
+      
+      // Revertir el cambio optimista en caso de error
+      setSeccionales(prevSeccionales => 
+        prevSeccionales.map(seccional => {
+          if (seccional.id === seccionalId) {
+            const reverted = { ...seccional };
+            reverted.promotores[promotorId].personas[personaId].votoListo = currentVoto;
+            return reverted;
+          }
+          return seccional;
+        })
+      );
     }
   };
 
