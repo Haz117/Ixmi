@@ -107,7 +107,7 @@ const GeneralPanel = () => {
         
         // Buscar el número de seccional
         if (row[0] && typeof row[0] === 'string' && row[0].includes('SECCIONAL')) {
-          const match = row[0].match(/\\d+/);
+          const match = row[0].match(/\d+/);
           if (match) {
             seccionalNumber = match[0];
           }
