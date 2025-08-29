@@ -57,9 +57,12 @@ const AdminPanel = () => {
   const [diferencia, setDiferencia] = useState(null);
 
   useEffect(() => {
-    // Verificar si el usuario es admin
-    if (!currentUser || !currentUser.email.includes('admin')) {
-      navigate('/login');
+    // Verificar si el usuario es admin de manera más estricta
+    const isAdmin = currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com';
+    
+    if (!currentUser || !isAdmin) {
+      alert('Acceso denegado. Solo los administradores pueden acceder a este panel.');
+      navigate('/general'); // Redirigir a panel general en lugar de login
       return;
     }
 

@@ -10,8 +10,8 @@ const AdminPanel = () => {
   const navigate = useNavigate();
   
   // Lista de emails de administradores
-  const adminEmails = ['admin@example.com', 'administrador@ixmicheck.com'];
-  const isAdmin = adminEmails.includes(currentUser?.email);
+  const adminEmails = ['admin@ixmicheck.com', 'administrador@ixmicheck.com'];
+  const isAdmin = adminEmails.includes(currentUser?.email) || currentUser?.email?.includes('admin');
   
   const [seccionales, setSeccionales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +42,10 @@ const AdminPanel = () => {
   });
 
   useEffect(() => {
-    // Verificar si el usuario es admin
+    // Verificar si el usuario es admin de manera más estricta
     if (!currentUser || !isAdmin) {
-      navigate('/login');
+      alert('Acceso denegado. Solo los administradores pueden acceder a este panel.');
+      navigate('/general'); // Redirigir a panel general en lugar de login
       return;
     }
 
