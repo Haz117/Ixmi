@@ -225,6 +225,15 @@ const GeneralPanel = () => {
           continue;
         }
 
+        // Saltar fila de encabezados
+        if (row[0] && typeof row[0] === 'string' && 
+            (row[0].toLowerCase().includes('total') || 
+             row[1] && row[1].toString().toLowerCase().includes('promotor') ||
+             row[2] && row[2].toString().toLowerCase().includes('nombre'))) {
+          console.log(`Saltando fila de encabezados en línea ${i}:`, row);
+          continue;
+        }
+
         // Procesar filas de datos
         if (row.length >= 3 && row[1] && row[2]) {
           const numeroPersona = row[1];
@@ -233,7 +242,20 @@ const GeneralPanel = () => {
           const claveElector = row[4] || '';
           const promotor = row[5];
 
-          if (!promotor) continue;
+          // Debug: mostrar información de la fila para diagnosticar problemas
+          console.log(`Fila ${i}:`, {
+            numeroPersona,
+            nombreCompleto,
+            curp,
+            claveElector,
+            promotor,
+            filaCompleta: row
+          });
+
+          if (!promotor || promotor.trim() === '' || promotor.toLowerCase() === 'promotor') {
+            console.log(`Saltando fila ${i} porque el promotor está vacío o es el encabezado:`, promotor);
+            continue;
+          }
 
           if (!promotoresData[promotor]) {
             promotoresData[promotor] = {
