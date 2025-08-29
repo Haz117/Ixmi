@@ -116,13 +116,16 @@ const AdminPanel = () => {
           continue;
         }
 
-        // Procesar filas de datos
-        if (row.length >= 6 && row[1] && row[2] && row[3]) {
+        // Procesar filas de datos - Solo requiere nombre completo
+        if (row.length >= 3 && row[1] && row[2]) {
           const numeroPersona = row[1];
           const nombreCompleto = row[2];
-          const curp = row[3];
-          const claveElector = row[4];
+          const curp = row[3] || ''; // CURP opcional
+          const claveElector = row[4] || ''; // Clave de Elector opcional
           const promotor = row[5];
+
+          // Verificar que tenga promotor
+          if (!promotor) continue;
 
           if (!promotoresData[promotor]) {
             promotoresData[promotor] = {
@@ -145,7 +148,9 @@ const AdminPanel = () => {
         const docRef = doc(db, 'seccionales', `seccional_${seccionalNumber}`);
         await setDoc(docRef, {
           numero: seccionalNumber,
-          promotores: promotoresData
+          promotores: promotoresData,
+          subidoPor: currentUser?.email || 'Usuario desconocido',
+          fechaSubida: new Date().toISOString()
         });
 
         alert(`Seccional ${seccionalNumber} subida exitosamente con ${Object.keys(promotoresData).length} promotores!`);
@@ -526,23 +531,23 @@ const AdminPanel = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">CURP</label>
+                    <label className="block text-sm font-medium text-gray-700">CURP (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.curp}
                       onChange={(e) => setNewPerson({...newPerson, curp: e.target.value})}
-                      required
+                      placeholder="CURP (opcional)"
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Clave de Elector</label>
+                    <label className="block text-sm font-medium text-gray-700">Clave de Elector (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.claveElector}
                       onChange={(e) => setNewPerson({...newPerson, claveElector: e.target.value})}
-                      required
+                      placeholder="Clave de Elector (opcional)"
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -600,23 +605,23 @@ const AdminPanel = () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">CURP</label>
+                  <label className="block text-sm font-medium text-gray-700">CURP (opcional)</label>
                   <input
                     type="text"
                     value={editPersonData.curp}
                     onChange={(e) => setEditPersonData({...editPersonData, curp: e.target.value})}
-                    required
+                    placeholder="CURP (opcional)"
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Clave de Elector</label>
+                  <label className="block text-sm font-medium text-gray-700">Clave de Elector (opcional)</label>
                   <input
                     type="text"
                     value={editPersonData.claveElector}
                     onChange={(e) => setEditPersonData({...editPersonData, claveElector: e.target.value})}
-                    required
+                    placeholder="Clave de Elector (opcional)"
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -733,9 +738,24 @@ const AdminPanel = () => {
           filteredData.map((seccional) => (
             <div key={seccional.id} className="bg-white rounded-lg shadow mb-8">
               <div className="px-6 py-4 border-b bg-blue-50">
-                <h2 className="text-xl font-semibold text-blue-900">
-                  Seccional {seccional.numero}
-                </h2>
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold text-blue-900">
+                    Seccional {seccional.numero}
+                  </h2>
+                  {/* Mostrar información de quién subió la seccional */}
+                  {seccional.subidoPor && (
+                    <div className="text-sm text-blue-700">
+                      <div className="bg-white px-3 py-1 rounded-md shadow-sm">
+                        <span className="font-medium">Subido por:</span> {seccional.subidoPor}
+                        {seccional.fechaSubida && (
+                          <div className="text-xs text-gray-600 mt-1">
+                            {new Date(seccional.fechaSubida).toLocaleString('es-ES')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               
               {seccional.promotores && Object.entries(seccional.promotores).map(([promotorId, promotor]) => (

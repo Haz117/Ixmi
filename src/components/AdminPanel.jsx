@@ -145,13 +145,16 @@ const AdminPanel = () => {
           continue;
         }
 
-        // Procesar filas de datos
-        if (row.length >= 6 && row[1] && row[2] && row[3]) {
+        // Procesar filas de datos - Solo requiere nombre completo
+        if (row.length >= 3 && row[1] && row[2]) {
           const numeroPersona = row[1];
           const nombreCompleto = row[2];
-          const curp = row[3];
-          const claveElector = row[4];
+          const curp = row[3] || ''; // CURP opcional
+          const claveElector = row[4] || ''; // Clave de Elector opcional
           const promotor = row[5];
+
+          // Verificar que tenga promotor
+          if (!promotor) continue;
 
           if (!promotoresData[promotor]) {
             promotoresData[promotor] = {
@@ -177,7 +180,9 @@ const AdminPanel = () => {
           await setDoc(seccionalRef, {
             numero: seccionalNumber,
             promotores: promotoresData,
-            fechaActualizacion: new Date().toISOString()
+            fechaActualizacion: new Date().toISOString(),
+            subidoPor: currentUser?.email || 'Usuario desconocido',
+            fechaSubida: new Date().toISOString()
           }, { merge: true });
         } else {
           // Si está offline, guardar localmente
@@ -575,7 +580,7 @@ const AdminPanel = () => {
           <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Total de Personas</h3>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Total Afiliados</h3>
                 <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
               </div>
               <div className="p-2 sm:p-3 bg-blue-100 rounded-full">
@@ -588,7 +593,7 @@ const AdminPanel = () => {
           <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Votos Listos</h3>
+                <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Asistió a Votar</h3>
                 <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.totalVotos}</p>
               </div>
               <div className="p-2 sm:p-3 bg-green-100 rounded-full">
@@ -839,26 +844,24 @@ const AdminPanel = () => {
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">CURP</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">CURP (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.curp}
                       onChange={(e) => setNewPerson({...newPerson, curp: e.target.value})}
-                      required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
-                      placeholder="Ingresa el CURP"
+                      placeholder="Ingresa el CURP (opcional)"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Clave de Elector</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Clave de Elector (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.claveElector}
                       onChange={(e) => setNewPerson({...newPerson, claveElector: e.target.value})}
-                      required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
-                      placeholder="Ingresa la clave de elector"
+                      placeholder="Ingresa la clave de elector (opcional)"
                     />
                   </div>
                 </div>
@@ -1145,9 +1148,22 @@ const AdminPanel = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                   </div>
+                <div className="flex flex-col">
                   <h2 className="text-lg sm:text-xl font-semibold text-blue-900">
                     Seccional {seccional.numero}
                   </h2>
+                  {/* Mostrar información de quién subió la seccional */}
+                  {seccional.subidoPor && (
+                    <div className="text-sm text-blue-700 mt-1">
+                      <span className="font-medium">Subido por:</span> {seccional.subidoPor}
+                      {seccional.fechaSubida && (
+                        <span className="ml-2 text-xs">
+                          ({new Date(seccional.fechaSubida).toLocaleString('es-ES')})
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
                 </div>
                 <button
                   onClick={() => handleDeleteSeccional(seccional.id, seccional.numero)}

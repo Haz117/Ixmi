@@ -309,11 +309,11 @@ const AdminPanel = () => {
         {/* Estadísticas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Personas</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Afiliados</h3>
             <p className="text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Listos</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Asistió a Votar</h3>
             <p className="text-3xl font-bold text-green-600">{stats.totalVotos}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
@@ -425,23 +425,23 @@ const AdminPanel = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">CURP</label>
+                    <label className="block text-sm font-medium text-gray-700">CURP (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.curp}
                       onChange={(e) => setNewPerson({...newPerson, curp: e.target.value})}
-                      required
+                      placeholder="CURP (opcional)"
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Clave de Elector</label>
+                    <label className="block text-sm font-medium text-gray-700">Clave de Elector (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.claveElector}
                       onChange={(e) => setNewPerson({...newPerson, claveElector: e.target.value})}
-                      required
+                      placeholder="Clave de Elector (opcional)"
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -499,23 +499,23 @@ const AdminPanel = () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">CURP</label>
+                  <label className="block text-sm font-medium text-gray-700">CURP (opcional)</label>
                   <input
                     type="text"
                     value={editPersonData.curp}
                     onChange={(e) => setEditPersonData({...editPersonData, curp: e.target.value})}
-                    required
+                    placeholder="CURP (opcional)"
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Clave de Elector</label>
+                  <label className="block text-sm font-medium text-gray-700">Clave de Elector (opcional)</label>
                   <input
                     type="text"
                     value={editPersonData.claveElector}
                     onChange={(e) => setEditPersonData({...editPersonData, claveElector: e.target.value})}
-                    required
+                    placeholder="Clave de Elector (opcional)"
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>

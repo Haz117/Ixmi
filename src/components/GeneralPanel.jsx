@@ -46,7 +46,19 @@ const GeneralPanel = () => {
   useEffect(() => {
     // Usar el contexto offline para cargar datos
     const unsubscribe = loadDataFromFirebase((data) => {
-      setSeccionales(data);
+      // Verificar si el usuario es admin
+      const isAdmin = currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com';
+      
+      if (isAdmin) {
+        // Los admin pueden ver todas las seccionales
+        setSeccionales(data);
+      } else {
+        // Los usuarios generales solo ven las seccionales que subieron ellos
+        const userSeccionales = data.filter(seccional => 
+          seccional.subidoPor === currentUser?.email
+        );
+        setSeccionales(userSeccionales);
+      }
       setLoading(false);
     });
 
@@ -55,7 +67,7 @@ const GeneralPanel = () => {
         unsubscribe();
       }
     };
-  }, [loadDataFromFirebase]);
+  }, [loadDataFromFirebase, currentUser]);
 
   const handleLogout = async () => {
     try {
@@ -94,13 +106,16 @@ const GeneralPanel = () => {
           continue;
         }
 
-        // Procesar filas de datos
-        if (row.length >= 6 && row[1] && row[2] && row[3]) {
+        // Procesar filas de datos - Solo requiere nombre completo
+        if (row.length >= 3 && row[1] && row[2]) {
           const numeroPersona = row[1];
           const nombreCompleto = row[2];
-          const curp = row[3];
-          const claveElector = row[4];
+          const curp = row[3] || ''; // CURP opcional
+          const claveElector = row[4] || ''; // Clave de Elector opcional
           const promotor = row[5];
+
+          // Verificar que tenga promotor
+          if (!promotor) continue;
 
           if (!promotoresData[promotor]) {
             promotoresData[promotor] = {
@@ -126,7 +141,9 @@ const GeneralPanel = () => {
           await setDoc(seccionalRef, {
             numero: seccionalNumber,
             promotores: promotoresData,
-            fechaActualizacion: new Date().toISOString()
+            fechaActualizacion: new Date().toISOString(),
+            subidoPor: currentUser?.email || 'Usuario desconocido',
+            fechaSubida: new Date().toISOString()
           }, { merge: true });
         } else {
           // Si está offline, guardar localmente
@@ -597,6 +614,24 @@ const GeneralPanel = () => {
           </div>
         </div>
 
+        {/* Información sobre visualización para usuarios no admin */}
+        {!(currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com') && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  <strong>Nota:</strong> Solo puedes ver las seccionales que has subido tú. Los administradores pueden ver todas las seccionales del sistema.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Search and Filter Section */}
         <div className="bg-white rounded-lg shadow mb-8">
           <div className="px-6 py-4 border-b">
@@ -728,23 +763,23 @@ const GeneralPanel = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">CURP</label>
+                    <label className="block text-sm font-medium text-gray-700">CURP (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.curp}
                       onChange={(e) => setNewPerson({...newPerson, curp: e.target.value})}
-                      required
+                      placeholder="CURP (opcional)"
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Clave de Elector</label>
+                    <label className="block text-sm font-medium text-gray-700">Clave de Elector (opcional)</label>
                     <input
                       type="text"
                       value={newPerson.claveElector}
                       onChange={(e) => setNewPerson({...newPerson, claveElector: e.target.value})}
-                      required
+                      placeholder="Clave de Elector (opcional)"
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -787,28 +822,27 @@ const GeneralPanel = () => {
                   />
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">CURP</label>
-                    <input
-                      type="text"
-                      value={editPersonData.curp}
-                      onChange={(e) => setEditPersonData({...editPersonData, curp: e.target.value})}
-                      required
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Clave de Elector</label>
-                    <input
-                      type="text"
-                      value={editPersonData.claveElector}
-                      onChange={(e) => setEditPersonData({...editPersonData, claveElector: e.target.value})}
-                      required
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">                <div>
+                  <label className="block text-sm font-medium text-gray-700">CURP (opcional)</label>
+                  <input
+                    type="text"
+                    value={editPersonData.curp}
+                    onChange={(e) => setEditPersonData({...editPersonData, curp: e.target.value})}
+                    placeholder="CURP (opcional)"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Clave de Elector (opcional)</label>
+                  <input
+                    type="text"
+                    value={editPersonData.claveElector}
+                    onChange={(e) => setEditPersonData({...editPersonData, claveElector: e.target.value})}
+                    placeholder="Clave de Elector (opcional)"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
                 </div>
                 
                 <div className="flex space-x-4">
@@ -834,11 +868,11 @@ const GeneralPanel = () => {
         {/* Estadísticas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total de Personas</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Afiliados</h3>
             <p className="text-3xl font-bold text-blue-600">{stats.totalPersonas}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Votos Listos</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Asistió a Votar</h3>
             <p className="text-3xl font-bold text-green-600">{stats.totalVotos}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
@@ -941,16 +975,31 @@ const GeneralPanel = () => {
         {getFilteredData().map((seccional) => (
           <div key={seccional.id} className="bg-white rounded-lg shadow mb-6">
             <div className="px-6 py-4 border-b">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Seccional {seccional.numero}
-                {searchTerm && (
-                  <span className="ml-2 text-sm text-gray-500">
-                    ({Object.values(seccional.promotores || {}).reduce((sum, promotor) => {
-                      return sum + Object.keys(promotor.personas || {}).length;
-                    }, 0)} resultados)
-                  </span>
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Seccional {seccional.numero}
+                  {searchTerm && (
+                    <span className="ml-2 text-sm text-gray-500">
+                      ({Object.values(seccional.promotores || {}).reduce((sum, promotor) => {
+                        return sum + Object.keys(promotor.personas || {}).length;
+                      }, 0)} resultados)
+                    </span>
+                  )}
+                </h2>
+                {/* Mostrar información de quién subió la seccional solo para admins */}
+                {(currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com') && seccional.subidoPor && (
+                  <div className="text-sm text-gray-600">
+                    <div className="bg-blue-50 px-3 py-1 rounded-md">
+                      <span className="font-medium">Subido por:</span> {seccional.subidoPor}
+                      {seccional.fechaSubida && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {new Date(seccional.fechaSubida).toLocaleString('es-ES')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </h2>
+              </div>
             </div>
             <div className="p-6">
               {seccional.promotores && Object.entries(seccional.promotores).map(([promotorId, promotor]) => (
