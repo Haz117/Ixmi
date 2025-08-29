@@ -1,12 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useOffline } from '../contexts/OfflineContext';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, onSnapshot, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import ConnectionStatus from './ConnectionStatus';
+import SyncButton from './SyncButton';
 import * as XLSX from 'xlsx';
 
 const AdminPanel = () => {
   const { currentUser, logout, signup } = useAuth();
+  const { 
+    isOnline, 
+    loadDataFromFirebase, 
+    updateVoteOffline, 
+    addPersonOffline, 
+    updatePersonOffline, 
+    deletePersonOffline,
+    uploadSeccionalOffline
+  } = useOffline();
   const navigate = useNavigate();
   
   const [seccionales, setSeccionales] = useState([]);
@@ -50,13 +62,9 @@ const AdminPanel = () => {
       return;
     }
 
-    // Escuchar cambios en tiempo real
-    const unsubscribe = onSnapshot(collection(db, 'seccionales'), (snapshot) => {
-      const seccionalesData = [];
-      snapshot.forEach((doc) => {
-        seccionalesData.push({ id: doc.id, ...doc.data() });
-      });
-      setSeccionales(seccionalesData.sort((a, b) => a.numero - b.numero));
+    // Usar el contexto offline para cargar datos
+    const unsubscribe = loadDataFromFirebase((data) => {
+      setSeccionales(data);
       setLoading(false);
 
       // Calcular estadísticas
@@ -64,7 +72,7 @@ const AdminPanel = () => {
       let totalVotos = 0;
       const promotoresStats = {};
 
-      seccionalesData.forEach(seccional => {
+      data.forEach(seccional => {
         if (seccional.promotores) {
           Object.entries(seccional.promotores).forEach(([, promotor]) => {
             if (!promotoresStats[promotor.nombre]) {
@@ -93,8 +101,12 @@ const AdminPanel = () => {
       });
     });
 
-    return () => unsubscribe();
-  }, [currentUser, navigate]);
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [currentUser, navigate, loadDataFromFirebase]);
 
   const handleLogout = async () => {
     try {
@@ -159,15 +171,20 @@ const AdminPanel = () => {
       }
 
       if (seccionalNumber && Object.keys(promotoresData).length > 0) {
-        // Guardar en Firebase
-        const seccionalRef = doc(db, 'seccionales', `seccional_${seccionalNumber}`);
-        await setDoc(seccionalRef, {
-          numero: seccionalNumber,
-          promotores: promotoresData,
-          fechaActualizacion: new Date().toISOString()
-        }, { merge: true });
+        if (isOnline) {
+          // Si está online, subir directamente a Firebase
+          const seccionalRef = doc(db, 'seccionales', `seccional_${seccionalNumber}`);
+          await setDoc(seccionalRef, {
+            numero: seccionalNumber,
+            promotores: promotoresData,
+            fechaActualizacion: new Date().toISOString()
+          }, { merge: true });
+        } else {
+          // Si está offline, guardar localmente
+          uploadSeccionalOffline(seccionalNumber, promotoresData);
+        }
 
-        alert(`Datos de la Seccional ${seccionalNumber} subidos exitosamente!`);
+        alert(`Datos de la Seccional ${seccionalNumber} ${isOnline ? 'subidos' : 'guardados localmente'} exitosamente!`);
       } else {
         alert('No se pudo procesar el archivo. Verifica el formato.');
       }
@@ -181,12 +198,36 @@ const AdminPanel = () => {
 
   const handleVotoToggle = async (seccionalId, promotorId, personaId, currentVoto) => {
     try {
-      const seccional = seccionales.find(s => s.id === seccionalId);
-      const updatedSeccional = { ...seccional };
-      updatedSeccional.promotores[promotorId].personas[personaId].votoListo = !currentVoto;
+      const newVoto = !currentVoto;
+      
+      if (isOnline) {
+        // Si está online, actualizar directamente en Firebase
+        const seccional = seccionales.find(s => s.id === seccionalId);
+        const updatedSeccional = { ...seccional };
+        updatedSeccional.promotores[promotorId].personas[personaId].votoListo = newVoto;
 
-      const seccionalRef = doc(db, 'seccionales', seccionalId);
-      await updateDoc(seccionalRef, updatedSeccional);
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        await updateDoc(seccionalRef, updatedSeccional);
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = updateVoteOffline(seccionalId, promotorId, personaId, newVoto);
+        if (!success) {
+          alert('Error al actualizar voto offline');
+          return;
+        }
+        
+        // Actualizar estado local inmediatamente para reflejar el cambio
+        setSeccionales(prevSeccionales => 
+          prevSeccionales.map(seccional => {
+            if (seccional.id === seccionalId) {
+              const updated = { ...seccional };
+              updated.promotores[promotorId].personas[personaId].votoListo = newVoto;
+              return updated;
+            }
+            return seccional;
+          })
+        );
+      }
     } catch (error) {
       console.error('Error al actualizar voto:', error);
       alert('Error al actualizar voto: ' + error.message);
@@ -469,6 +510,7 @@ const AdminPanel = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      <ConnectionStatus />
       {/* Header */}
       <header className="bg-white shadow-lg border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -506,6 +548,7 @@ const AdminPanel = () => {
                   disabled={uploading}
                 />
               </label>
+              <SyncButton />
               <div className="flex items-center space-x-3 text-sm text-gray-600">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />

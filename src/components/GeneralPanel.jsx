@@ -1,12 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useOffline } from '../contexts/OfflineContext';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, doc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc } from 'firebase/firestore';
+import ConnectionStatus from './ConnectionStatus';
+import SyncButton from './SyncButton';
 import * as XLSX from 'xlsx';
 
 const GeneralPanel = () => {
   const { currentUser, logout } = useAuth();
+  const { 
+    isOnline, 
+    loadDataFromFirebase, 
+    updateVoteOffline, 
+    addPersonOffline, 
+    updatePersonOffline, 
+    deletePersonOffline,
+    uploadSeccionalOffline
+  } = useOffline();
   const navigate = useNavigate();
   const [seccionales, setSeccionales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,18 +44,18 @@ const GeneralPanel = () => {
   const [diferencia, setDiferencia] = useState(null);
 
   useEffect(() => {
-    // Escuchar cambios en tiempo real
-    const unsubscribe = onSnapshot(collection(db, 'seccionales'), (snapshot) => {
-      const seccionalesData = [];
-      snapshot.forEach((doc) => {
-        seccionalesData.push({ id: doc.id, ...doc.data() });
-      });
-      setSeccionales(seccionalesData.sort((a, b) => a.numero - b.numero));
+    // Usar el contexto offline para cargar datos
+    const unsubscribe = loadDataFromFirebase((data) => {
+      setSeccionales(data);
       setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [loadDataFromFirebase]);
 
   const handleLogout = async () => {
     try {
@@ -108,15 +120,28 @@ const GeneralPanel = () => {
       }
 
       if (seccionalNumber && Object.keys(promotoresData).length > 0) {
-        // Guardar en Firebase
-        const seccionalRef = doc(db, 'seccionales', `seccional_${seccionalNumber}`);
-        await setDoc(seccionalRef, {
-          numero: seccionalNumber,
-          promotores: promotoresData,
-          fechaActualizacion: new Date().toISOString()
-        }, { merge: true });
+        if (isOnline) {
+          // Si está online, subir directamente a Firebase
+          const seccionalRef = doc(db, 'seccionales', `seccional_${seccionalNumber}`);
+          await setDoc(seccionalRef, {
+            numero: seccionalNumber,
+            promotores: promotoresData,
+            fechaActualizacion: new Date().toISOString()
+          }, { merge: true });
+        } else {
+          // Si está offline, guardar localmente
+          uploadSeccionalOffline(seccionalNumber, promotoresData);
+        }
 
-        alert(`Datos de la Seccional ${seccionalNumber} subidos exitosamente!`);
+        alert(`Datos de la Seccional ${seccionalNumber} ${isOnline ? 'subidos' : 'guardados localmente'} exitosamente!`);
+        
+        // Recargar datos
+        const unsubscribe = loadDataFromFirebase((data) => {
+          setSeccionales(data);
+        });
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
       } else {
         alert('No se pudo procesar el archivo. Verifica el formato.');
       }
@@ -130,15 +155,40 @@ const GeneralPanel = () => {
 
   const toggleVoto = async (seccionalId, promotorId, personaId, currentVoto) => {
     try {
-      const seccionalRef = doc(db, 'seccionales', seccionalId);
-      const seccional = seccionales.find(s => s.id === seccionalId);
+      const newVoto = !currentVoto;
       
-      const updatedSeccional = { ...seccional };
-      updatedSeccional.promotores[promotorId].personas[personaId].votoListo = !currentVoto;
-      
-      await updateDoc(seccionalRef, updatedSeccional);
+      if (isOnline) {
+        // Si está online, actualizar directamente en Firebase
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        const seccional = seccionales.find(s => s.id === seccionalId);
+        
+        const updatedSeccional = { ...seccional };
+        updatedSeccional.promotores[promotorId].personas[personaId].votoListo = newVoto;
+        
+        await updateDoc(seccionalRef, updatedSeccional);
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = updateVoteOffline(seccionalId, promotorId, personaId, newVoto);
+        if (!success) {
+          alert('Error al actualizar voto offline');
+          return;
+        }
+        
+        // Actualizar estado local inmediatamente para reflejar el cambio
+        setSeccionales(prevSeccionales => 
+          prevSeccionales.map(seccional => {
+            if (seccional.id === seccionalId) {
+              const updated = { ...seccional };
+              updated.promotores[promotorId].personas[personaId].votoListo = newVoto;
+              return updated;
+            }
+            return seccional;
+          })
+        );
+      }
     } catch (error) {
       console.error('Error al actualizar voto:', error);
+      alert('Error al actualizar voto: ' + error.message);
     }
   };
 
@@ -151,23 +201,56 @@ const GeneralPanel = () => {
     }
 
     try {
-      const seccionalRef = doc(db, 'seccionales', selectedSeccional);
-      const seccional = seccionales.find(s => s.id === selectedSeccional);
-      
-      const updatedSeccional = { ...seccional };
-      const personId = `persona_${Date.now()}`;
-      
-      if (!updatedSeccional.promotores[selectedPromotor].personas) {
-        updatedSeccional.promotores[selectedPromotor].personas = {};
+      if (isOnline) {
+        // Si está online, agregar directamente a Firebase
+        const seccionalRef = doc(db, 'seccionales', selectedSeccional);
+        const seccional = seccionales.find(s => s.id === selectedSeccional);
+        
+        const updatedSeccional = { ...seccional };
+        const personId = `persona_${Date.now()}`;
+        
+        if (!updatedSeccional.promotores[selectedPromotor].personas) {
+          updatedSeccional.promotores[selectedPromotor].personas = {};
+        }
+        
+        updatedSeccional.promotores[selectedPromotor].personas[personId] = {
+          ...newPerson,
+          votoListo: false,
+          numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1
+        };
+        
+        await updateDoc(seccionalRef, updatedSeccional);
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = addPersonOffline(selectedSeccional, selectedPromotor, newPerson);
+        if (!success) {
+          alert('Error al agregar persona offline');
+          return;
+        }
+        
+        // Actualizar estado local inmediatamente
+        setSeccionales(prevSeccionales => 
+          prevSeccionales.map(seccional => {
+            if (seccional.id === selectedSeccional) {
+              const updated = { ...seccional };
+              const personId = `persona_${Date.now()}`;
+              
+              if (!updated.promotores[selectedPromotor].personas) {
+                updated.promotores[selectedPromotor].personas = {};
+              }
+              
+              updated.promotores[selectedPromotor].personas[personId] = {
+                ...newPerson,
+                votoListo: false,
+                numeroPersona: Object.keys(updated.promotores[selectedPromotor].personas).length + 1
+              };
+              
+              return updated;
+            }
+            return seccional;
+          })
+        );
       }
-      
-      updatedSeccional.promotores[selectedPromotor].personas[personId] = {
-        ...newPerson,
-        votoListo: false,
-        numeroPersona: Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1
-      };
-      
-      await updateDoc(seccionalRef, updatedSeccional);
       
       setNewPerson({ nombreCompleto: '', curp: '', claveElector: '' });
       setShowAddPersonForm(false);
@@ -201,16 +284,46 @@ const GeneralPanel = () => {
     if (!editingPerson) return;
 
     try {
-      const seccionalRef = doc(db, 'seccionales', editingPerson.seccionalId);
-      const seccional = seccionales.find(s => s.id === editingPerson.seccionalId);
-      
-      const updatedSeccional = { ...seccional };
-      updatedSeccional.promotores[editingPerson.promotorId].personas[editingPerson.personaId] = {
-        ...updatedSeccional.promotores[editingPerson.promotorId].personas[editingPerson.personaId],
-        ...editPersonData
-      };
-      
-      await updateDoc(seccionalRef, updatedSeccional);
+      if (isOnline) {
+        // Si está online, actualizar directamente en Firebase
+        const seccionalRef = doc(db, 'seccionales', editingPerson.seccionalId);
+        const seccional = seccionales.find(s => s.id === editingPerson.seccionalId);
+        
+        const updatedSeccional = { ...seccional };
+        updatedSeccional.promotores[editingPerson.promotorId].personas[editingPerson.personaId] = {
+          ...updatedSeccional.promotores[editingPerson.promotorId].personas[editingPerson.personaId],
+          ...editPersonData
+        };
+        
+        await updateDoc(seccionalRef, updatedSeccional);
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = updatePersonOffline(
+          editingPerson.seccionalId, 
+          editingPerson.promotorId, 
+          editingPerson.personaId, 
+          editPersonData
+        );
+        if (!success) {
+          alert('Error al actualizar persona offline');
+          return;
+        }
+        
+        // Actualizar estado local inmediatamente
+        setSeccionales(prevSeccionales => 
+          prevSeccionales.map(seccional => {
+            if (seccional.id === editingPerson.seccionalId) {
+              const updated = { ...seccional };
+              updated.promotores[editingPerson.promotorId].personas[editingPerson.personaId] = {
+                ...updated.promotores[editingPerson.promotorId].personas[editingPerson.personaId],
+                ...editPersonData
+              };
+              return updated;
+            }
+            return seccional;
+          })
+        );
+      }
       
       setEditPersonData({ nombreCompleto: '', curp: '', claveElector: '' });
       setShowEditPersonForm(false);
@@ -229,13 +342,35 @@ const GeneralPanel = () => {
     }
 
     try {
-      const seccionalRef = doc(db, 'seccionales', seccionalId);
-      const seccional = seccionales.find(s => s.id === seccionalId);
-      
-      const updatedSeccional = { ...seccional };
-      delete updatedSeccional.promotores[promotorId].personas[personaId];
-      
-      await updateDoc(seccionalRef, updatedSeccional);
+      if (isOnline) {
+        // Si está online, eliminar directamente de Firebase
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        const seccional = seccionales.find(s => s.id === seccionalId);
+        
+        const updatedSeccional = { ...seccional };
+        delete updatedSeccional.promotores[promotorId].personas[personaId];
+        
+        await updateDoc(seccionalRef, updatedSeccional);
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = deletePersonOffline(seccionalId, promotorId, personaId);
+        if (!success) {
+          alert('Error al eliminar persona offline');
+          return;
+        }
+        
+        // Actualizar estado local inmediatamente
+        setSeccionales(prevSeccionales => 
+          prevSeccionales.map(seccional => {
+            if (seccional.id === seccionalId) {
+              const updated = { ...seccional };
+              delete updated.promotores[promotorId].personas[personaId];
+              return updated;
+            }
+            return seccional;
+          })
+        );
+      }
       
       alert('Persona eliminada exitosamente!');
     } catch (error) {
@@ -393,6 +528,7 @@ const GeneralPanel = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      <ConnectionStatus />
       {/* Header */}
       <header className="bg-white shadow-lg border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -405,6 +541,7 @@ const GeneralPanel = () => {
                 </svg>
                 <span className="hidden sm:inline">Bienvenido, {currentUser?.email}</span>
               </div>
+              <SyncButton />
               <button
                 onClick={handleLogout}
                 className="inline-flex items-center bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
