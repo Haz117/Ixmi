@@ -51,10 +51,12 @@ const AdminPanel = () => {
   const [stats, setStats] = useState({
     totalPersonas: 0,
     totalVotos: 0,
-    promotores: {}
+    seccionales: {}
   });
   const [totalVotantesDelDia, setTotalVotantesDelDia] = useState('');
   const [diferencia, setDiferencia] = useState(null);
+  const [showSeccionalModal, setShowSeccionalModal] = useState(false);
+  const [selectedSeccionalStats, setSelectedSeccionalStats] = useState(null);
 
   useEffect(() => {
     // Verificar si el usuario es admin de manera más estricta
@@ -74,34 +76,46 @@ const AdminPanel = () => {
       // Calcular estadísticas
       let totalPersonas = 0;
       let totalVotos = 0;
-      const promotoresStats = {};
+      const seccionalesStats = {};
 
       data.forEach(seccional => {
+        let seccionalPersonas = 0;
+        let seccionalVotos = 0;
+        const promotoresData = {};
+
         if (seccional.promotores) {
           Object.entries(seccional.promotores).forEach(([, promotor]) => {
-            if (!promotoresStats[promotor.nombre]) {
-              promotoresStats[promotor.nombre] = {
-                totalPersonas: 0,
-                totalVotos: 0
-              };
-            }
+            const promotorPersonas = promotor.personas ? Object.values(promotor.personas).length : 0;
+            const promotorVotos = promotor.personas ? Object.values(promotor.personas).filter(p => p.votoListo).length : 0;
             
-            if (promotor.personas) {
-              const personas = Object.values(promotor.personas);
-              promotoresStats[promotor.nombre].totalPersonas += personas.length;
-              promotoresStats[promotor.nombre].totalVotos += personas.filter(p => p.votoListo).length;
-              
-              totalPersonas += personas.length;
-              totalVotos += personas.filter(p => p.votoListo).length;
-            }
+            promotoresData[promotor.nombre] = {
+              personas: promotorPersonas,
+              votos: promotorVotos,
+              porcentaje: promotorPersonas > 0 ? Math.round((promotorVotos / promotorPersonas) * 100) : 0
+            };
+            
+            seccionalPersonas += promotorPersonas;
+            seccionalVotos += promotorVotos;
           });
         }
+
+        seccionalesStats[seccional.numero] = {
+          id: seccional.id,
+          numero: seccional.numero,
+          totalPersonas: seccionalPersonas,
+          totalVotos: seccionalVotos,
+          porcentaje: seccionalPersonas > 0 ? Math.round((seccionalVotos / seccionalPersonas) * 100) : 0,
+          promotores: promotoresData
+        };
+
+        totalPersonas += seccionalPersonas;
+        totalVotos += seccionalVotos;
       });
 
       setStats({
         totalPersonas,
         totalVotos,
-        promotores: promotoresStats
+        seccionales: seccionalesStats
       });
     });
 
@@ -578,6 +592,11 @@ const AdminPanel = () => {
     setDiferencia(null);
   };
 
+  const handleSeccionalClick = (seccionalStats) => {
+    setSelectedSeccionalStats(seccionalStats);
+    setShowSeccionalModal(true);
+  };
+
 
 
   if (loading) {
@@ -781,45 +800,69 @@ const AdminPanel = () => {
           </div>
         </div>
 
-        {/* Estadísticas por Promotor */}
+        {/* Estadísticas Generales por Seccional */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
             <div className="flex items-center">
               <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas por Promotor</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas Generales por Seccional</h2>
             </div>
           </div>
           <div className="p-4 sm:p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {Object.entries(stats.promotores).map(([nombre, data]) => (
-                <div key={nombre} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow duration-200">
-                  <h4 className="font-semibold text-gray-900 text-base sm:text-lg mb-2">{nombre}</h4>
+              {Object.values(stats.seccionales).map((seccional) => (
+                <div 
+                  key={seccional.numero} 
+                  className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer group"
+                  onClick={() => handleSeccionalClick(seccional)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-gray-900 text-base sm:text-lg group-hover:text-blue-600 transition-colors">
+                      Seccional {seccional.numero}
+                    </h4>
+                    <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                   <div className="space-y-1">
                     <p className="text-sm sm:text-base text-gray-600">
-                      <span className="font-medium">Personas:</span> {data.totalPersonas}
+                      <span className="font-medium">Afiliados:</span> {seccional.totalPersonas}
                     </p>
                     <p className="text-sm sm:text-base text-gray-600">
-                      <span className="font-medium">Votos:</span> {data.totalVotos}
+                      <span className="font-medium">Votaron:</span> {seccional.totalVotos}
                     </p>
                   </div>
                   <div className="mt-3">
                     <div className="flex justify-between text-sm text-gray-600 mb-1">
                       <span>Progreso</span>
-                      <span>{data.totalPersonas > 0 ? Math.round((data.totalVotos / data.totalPersonas) * 100) : 0}%</span>
+                      <span>{seccional.porcentaje}%</span>
                     </div>
                     <div className="bg-gray-200 rounded-full h-2">
                       <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ 
-                          width: `${data.totalPersonas > 0 ? (data.totalVotos / data.totalPersonas) * 100 : 0}%` 
-                        }}
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${seccional.porcentaje}%` }}
                       ></div>
                     </div>
                   </div>
+                  <div className="mt-2 text-xs text-gray-500 group-hover:text-blue-500 transition-colors">
+                    Clic para ver detalles
+                  </div>
                 </div>
               ))}
+              
+              {Object.keys(stats.seccionales).length === 0 && (
+                <div className="col-span-full text-center py-8">
+                  <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-600">No hay seccionales registradas</p>
+                  <p className="text-sm text-gray-500 mt-1">Sube un archivo Excel para comenzar</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1148,6 +1191,175 @@ const AdminPanel = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Detalles de Seccional */}
+        {showSeccionalModal && selectedSeccionalStats && (
+          <div 
+            className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowSeccionalModal(false);
+                setSelectedSeccionalStats(null);
+              }
+            }}
+          >
+            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-blue-600 rounded-lg mr-3">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-blue-900">
+                        Detalles de Seccional {selectedSeccionalStats.numero}
+                      </h3>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Información detallada por promotor
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowSeccionalModal(false);
+                      setSelectedSeccionalStats(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-white/50 transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                {/* Resumen General */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-700">Total Afiliados</p>
+                        <p className="text-2xl font-bold text-blue-900">{selectedSeccionalStats.totalPersonas}</p>
+                      </div>
+                      <div className="p-2 bg-blue-600 rounded-lg">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-green-700">Asistió a Votar</p>
+                        <p className="text-2xl font-bold text-green-900">{selectedSeccionalStats.totalVotos}</p>
+                      </div>
+                      <div className="p-2 bg-green-600 rounded-lg">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-purple-700">Porcentaje</p>
+                        <p className="text-2xl font-bold text-purple-900">{selectedSeccionalStats.porcentaje}%</p>
+                      </div>
+                      <div className="p-2 bg-purple-600 rounded-lg">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Barra de Progreso General */}
+                <div className="mb-6">
+                  <div className="flex justify-between text-sm text-gray-700 mb-2">
+                    <span className="font-medium">Progreso General de la Seccional</span>
+                    <span className="font-bold">{selectedSeccionalStats.porcentaje}%</span>
+                  </div>
+                  <div className="bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${selectedSeccionalStats.porcentaje}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Detalles por Promotor */}
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Estadísticas por Promotor
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Object.entries(selectedSeccionalStats.promotores).map(([nombre, data]) => (
+                      <div key={nombre} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="font-medium text-gray-900 text-base">{nombre}</h5>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            data.porcentaje >= 80 ? 'bg-green-100 text-green-800' :
+                            data.porcentaje >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {data.porcentaje}%
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Afiliados:</span>
+                            <span className="font-medium text-gray-900">{data.personas}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Votaron:</span>
+                            <span className="font-medium text-gray-900">{data.votos}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3">
+                          <div className="bg-gray-200 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                data.porcentaje >= 80 ? 'bg-green-500' :
+                                data.porcentaje >= 50 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${data.porcentaje}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {Object.keys(selectedSeccionalStats.promotores).length === 0 && (
+                    <div className="text-center py-8">
+                      <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-600">No hay promotores registrados en esta seccional</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
