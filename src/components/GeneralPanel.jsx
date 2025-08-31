@@ -224,323 +224,48 @@ const GeneralPanel = () => {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-      // Procesar los datos del Excel con lógica más flexible
+      // Procesar los datos del Excel
       let seccionalNumber = null;
       const promotoresData = {};
-      let currentPromotor = null;
-      let personaCounter = 1;
 
-      // Función para detectar si una celda contiene un número de seccional
-      const detectSeccionalNumber = (cellValue) => {
-        if (!cellValue) return null;
-        const str = cellValue.toString().toUpperCase();
-        
-        // Buscar patrones como "SECCIONAL 123", "SECC 123", "SEC 123", etc.
-        const patterns = [
-          /SECCIONAL\s*:?\s*(\d+)/i,
-          /SECC\s*:?\s*(\d+)/i,
-          /SEC\s*:?\s*(\d+)/i,
-          /SECCIÓN\s*:?\s*(\d+)/i,
-          /^(\d{3,4})$/ // Número solo de 3-4 dígitos
-        ];
-        
-        for (const pattern of patterns) {
-          const match = str.match(pattern);
-          if (match) return match[1];
-        }
-        return null;
-      };
-
-      // Función para detectar si una fila contiene datos de una persona
-      const isPersonRow = (row) => {
-        console.log(`Analizando fila para persona:`, row);
-        
-        // Una fila de persona debe tener al menos un nombre
-        for (let i = 0; i < row.length; i++) {
-          const cell = row[i];
-          if (cell && typeof cell === 'string' && cell.trim().length > 2) {
-            // Verificar que no sea un encabezado común
-            const cellLower = cell.toLowerCase().trim();
-            const excludeWords = ['promotor', 'nombre', 'curp', 'clave', 'total', 'seccional', '#', 'no.', 'num', 'elector'];
-            
-            const isExcluded = excludeWords.some(word => cellLower.includes(word));
-            
-            console.log(`Celda analizada: "${cell}", excluida: ${isExcluded}`);
-            
-            if (!isExcluded) {
-              console.log(`Fila identificada como persona por celda: "${cell}"`);
-              return true;
-            }
-          }
-        }
-        console.log('Fila NO identificada como persona');
-        return false;
-      };
-
-      // Función para detectar si una fila contiene un promotor
-      const detectPromotor = (row) => {
-        for (let i = 0; i < row.length; i++) {
-          const cell = row[i];
-          if (cell && typeof cell === 'string') {
-            const cellStr = cell.toString().trim();
-            const cellLower = cellStr.toLowerCase();
-            
-            console.log(`Analizando celda para promotor: "${cellStr}" (longitud: ${cellStr.length})`);
-            
-            // Si encuentra la palabra "promotor" seguida de un nombre
-            if (cellLower.includes('promotor') && cellStr.length > 8) {
-              // Extraer el nombre del promotor después de "promotor"
-              const promotorMatch = cellStr.match(/promotor[:\s]*(.+)/i);
-              if (promotorMatch && promotorMatch[1].trim()) {
-                console.log(`Promotor encontrado con patrón: ${promotorMatch[1].trim()}`);
-                return promotorMatch[1].trim();
-              }
-              // Si solo dice "Promotor: Nombre" o similar
-              const afterPromotor = cellStr.substring(cellLower.indexOf('promotor') + 8).replace(/[:]/g, '').trim();
-              if (afterPromotor) {
-                console.log(`Promotor encontrado después de palabra: ${afterPromotor}`);
-                return afterPromotor;
-              }
-            }
-            
-            // Buscar en la celda siguiente si esta celda dice solo "promotor"
-            if (cellLower === 'promotor' || cellLower === 'promotor:') {
-              const nextCell = row[i + 1];
-              if (nextCell && typeof nextCell === 'string' && nextCell.trim().length > 2) {
-                console.log(`Promotor encontrado en celda siguiente: ${nextCell.trim()}`);
-                return nextCell.trim();
-              }
-            }
-            
-            // Si es una celda que contiene un nombre potencial (más de 8 caracteres, contiene espacios)
-            if (cellStr.length > 8 && cellStr.includes(' ') && 
-                !cellLower.includes('seccional') && 
-                !cellLower.includes('total') &&
-                !cellLower.includes('curp') &&
-                !cellLower.includes('clave') &&
-                !cellLower.includes('nombre') &&
-                !cellLower.includes('elector')) {
-              
-              // Verificar si es probable que sea un nombre de promotor
-              // (aparece relativamente solo en la fila)
-              const nonEmptyCells = row.filter(c => c && c.toString().trim());
-              console.log(`Posible promotor por contexto: "${cellStr}", celdas no vacías: ${nonEmptyCells.length}`);
-              
-              if (nonEmptyCells.length <= 4) {
-                console.log(`Promotor detectado por contexto: ${cellStr}`);
-                return cellStr;
-              }
-            }
-          }
-        }
-        return null;
-      };
-
-      // Función para extraer datos de persona de una fila
-      const extractPersonData = (row) => {
-        const datos = {
-          numeroPersona: null,
-          nombreCompleto: null,
-          curp: null,
-          claveElector: null
-        };
-
-        let nameFound = false;
-        
-        for (let i = 0; i < row.length; i++) {
-          const cell = row[i];
-          if (!cell) continue;
-          
-          const cellStr = cell.toString().trim();
-          
-          // Buscar número de persona (1-3 dígitos al inicio)
-          if (!datos.numeroPersona && /^\d{1,3}$/.test(cellStr)) {
-            datos.numeroPersona = parseInt(cellStr);
-          }
-          
-          // Buscar nombre (cadena más larga con espacios)
-          else if (!nameFound && cellStr.length > 5 && cellStr.includes(' ')) {
-            const cellLower = cellStr.toLowerCase();
-            if (!cellLower.includes('promotor') && 
-                !cellLower.includes('seccional') && 
-                !cellLower.includes('curp') &&
-                !cellLower.includes('clave')) {
-              datos.nombreCompleto = cellStr;
-              nameFound = true;
-            }
-          }
-          
-          // Buscar CURP (18 caracteres alfanuméricos)
-          else if (!datos.curp && /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(cellStr.toUpperCase())) {
-            datos.curp = cellStr.toUpperCase();
-          }
-          
-          // Buscar clave de elector (patrón típico)
-          else if (!datos.claveElector && /^[A-Z0-9]{18}$/.test(cellStr.toUpperCase())) {
-            datos.claveElector = cellStr.toUpperCase();
-          }
-          
-          // Si no se encontró CURP, buscar cadenas largas que puedan ser CURP
-          else if (!datos.curp && cellStr.length === 18 && /^[A-Z0-9]+$/i.test(cellStr)) {
-            datos.curp = cellStr.toUpperCase();
-          }
-          
-          // Si no se encontró clave de elector, buscar otras cadenas largas
-          else if (!datos.claveElector && cellStr.length >= 10 && /^[A-Z0-9]+$/i.test(cellStr)) {
-            datos.claveElector = cellStr.toUpperCase();
-          }
-        }
-
-        return datos;
-      };
-
-      console.log('Iniciando procesamiento flexible del Excel...');
-      console.log('Datos completos del Excel:', jsonData);
-      console.log(`Total de filas: ${jsonData.length}`);
-
-      // Primera pasada: buscar número de seccional
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
-        if (!row || row.length === 0) continue;
-
-        // Buscar en toda la fila
-        for (let j = 0; j < row.length; j++) {
-          const detectedNumber = detectSeccionalNumber(row[j]);
-          if (detectedNumber) {
-            seccionalNumber = detectedNumber;
-            console.log(`Número de seccional encontrado: ${seccionalNumber} en fila ${i}, columna ${j}`);
-            break;
-          }
-        }
         
-        if (seccionalNumber) break;
-      }
-
-      // Si no se encontró seccional, pedir al usuario
-      if (!seccionalNumber) {
-        seccionalNumber = prompt('No se pudo detectar automáticamente el número de seccional. Por favor ingresa el número:');
-        if (!seccionalNumber) {
-          alert('Es necesario especificar un número de seccional');
-          return;
-        }
-      }
-
-      // Segunda pasada: procesar datos
-      for (let i = 0; i < jsonData.length; i++) {
-        const row = jsonData[i];
-        if (!row || row.length === 0) continue;
-
-        console.log(`Procesando fila ${i}:`, row);
-
-        // Intentar detectar promotor en esta fila
-        const promotorDetectado = detectPromotor(row);
-        if (promotorDetectado) {
-          currentPromotor = promotorDetectado;
-          personaCounter = 1; // Reiniciar contador para cada promotor
-          
-          if (!promotoresData[currentPromotor]) {
-            promotoresData[currentPromotor] = {
-              nombre: currentPromotor,
-              personas: {}
-            };
+        // Buscar el número de seccional
+        if (row[0] && typeof row[0] === 'string' && row[0].includes('SECCIONAL')) {
+          const match = row[0].match(/\d+/);
+          if (match) {
+            seccionalNumber = match[0];
           }
-          
-          console.log(`✅ Promotor detectado: ${currentPromotor} en fila ${i}`);
           continue;
         }
 
-        // Si hay un promotor actual y esta fila parece contener datos de persona
-        if (currentPromotor && isPersonRow(row)) {
-          const personData = extractPersonData(row);
-          
-          console.log(`Datos extraídos de persona:`, personData);
-          
-          if (personData.nombreCompleto) {
-            // Usar el número detectado o asignar uno secuencial
-            const numeroPersona = personData.numeroPersona || personaCounter;
-            
-            promotoresData[currentPromotor].personas[`persona_${numeroPersona}`] = {
-              numeroPersona: numeroPersona,
-              nombreCompleto: personData.nombreCompleto,
-              curp: personData.curp || '',
-              claveElector: personData.claveElector || '',
-              votoListo: false
+        // Procesar filas de datos - Solo requiere nombre completo
+        if (row.length >= 3 && row[1] && row[2]) {
+          const numeroPersona = row[1];
+          const nombreCompleto = row[2];
+          const curp = row[3] || ''; // CURP opcional
+          const claveElector = row[4] || ''; // Clave de Elector opcional
+          const promotor = row[5];
+
+          // Verificar que tenga promotor
+          if (!promotor) continue;
+
+          if (!promotoresData[promotor]) {
+            promotoresData[promotor] = {
+              nombre: promotor,
+              personas: {}
             };
-            
-            console.log(`✅ Persona agregada: ${personData.nombreCompleto} al promotor ${currentPromotor}`);
-            personaCounter++;
-          } else {
-            console.log(`❌ Fila de persona sin nombre completo válido`);
           }
-        } else {
-          if (!currentPromotor) {
-            console.log(`⚠️ No hay promotor actual para procesar fila ${i}`);
-          }
-        }
-      }
 
-      console.log('Procesamiento completado:', {
-        seccional: seccionalNumber,
-        promotores: Object.keys(promotoresData),
-        totalPersonas: Object.values(promotoresData).reduce((total, promotor) => 
-          total + Object.keys(promotor.personas).length, 0)
-      });
-
-      // Si no se encontraron promotores, intentar método alternativo más simple
-      if (Object.keys(promotoresData).length === 0) {
-        console.log('⚠️ No se encontraron promotores con método principal. Intentando método alternativo...');
-        
-        let fallbackPromotor = 'Promotor General';
-        let fallbackPersonaCounter = 1;
-        
-        // Buscar cualquier fila que tenga datos que parezcan personas
-        for (let i = 0; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || row.length === 0) continue;
-          
-          // Buscar filas con al menos 3 celdas no vacías
-          const nonEmptyCells = row.filter(cell => cell && cell.toString().trim());
-          
-          if (nonEmptyCells.length >= 2) {
-            // Ver si alguna celda parece un nombre (más de 5 caracteres con espacio)
-            const possibleName = nonEmptyCells.find(cell => {
-              const str = cell.toString().trim();
-              return str.length > 5 && str.includes(' ') && 
-                     !str.toLowerCase().includes('seccional') &&
-                     !str.toLowerCase().includes('total') &&
-                     !str.toLowerCase().includes('promotor');
-            });
-            
-            if (possibleName) {
-              // Crear promotor por defecto si no existe
-              if (!promotoresData[fallbackPromotor]) {
-                promotoresData[fallbackPromotor] = {
-                  nombre: fallbackPromotor,
-                  personas: {}
-                };
-                console.log(`✅ Creado promotor de respaldo: ${fallbackPromotor}`);
-              }
-              
-              // Agregar persona
-              promotoresData[fallbackPromotor].personas[`persona_${fallbackPersonaCounter}`] = {
-                numeroPersona: fallbackPersonaCounter,
-                nombreCompleto: possibleName.toString().trim(),
-                curp: '',
-                claveElector: '',
-                votoListo: false
-              };
-              
-              console.log(`✅ Persona agregada con método alternativo: ${possibleName}`);
-              fallbackPersonaCounter++;
-            }
-          }
+          promotoresData[promotor].personas[`persona_${numeroPersona}`] = {
+            numeroPersona,
+            nombreCompleto,
+            curp,
+            claveElector,
+            votoListo: false
+          };
         }
-        
-        console.log('Procesamiento alternativo completado:', {
-          promotoresEncontrados: Object.keys(promotoresData).length,
-          personasEncontradas: Object.values(promotoresData).reduce((total, promotor) => 
-            total + Object.keys(promotor.personas).length, 0)
-        });
       }
 
       if (seccionalNumber && Object.keys(promotoresData).length > 0) {
