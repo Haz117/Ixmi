@@ -17,7 +17,8 @@ const GeneralPanel = () => {
     addPersonOffline, 
     updatePersonOffline, 
     deletePersonOffline,
-    uploadSeccionalOffline
+    uploadSeccionalOffline,
+    updateSeccionalOffline
   } = useOffline();
   const navigate = useNavigate();
   
@@ -41,6 +42,20 @@ const GeneralPanel = () => {
     nombreCompleto: '',
     curp: '',
     claveElector: ''
+  });
+
+  // Estados para crear nueva seccional
+  const [showCreateSeccionalForm, setShowCreateSeccionalForm] = useState(false);
+  const [newSeccional, setNewSeccional] = useState({
+    numero: '',
+    promotor: ''
+  });
+
+  // Estados para agregar nuevo promotor
+  const [showAddPromotorForm, setShowAddPromotorForm] = useState(false);
+  const [selectedSeccionalForPromotor, setSelectedSeccionalForPromotor] = useState('');
+  const [newPromotor, setNewPromotor] = useState({
+    nombre: ''
   });
 
   const [stats, setStats] = useState({
@@ -209,69 +224,323 @@ const GeneralPanel = () => {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-      // Procesar los datos del Excel
+      // Procesar los datos del Excel con lógica más flexible
       let seccionalNumber = null;
       const promotoresData = {};
+      let currentPromotor = null;
+      let personaCounter = 1;
 
+      // Función para detectar si una celda contiene un número de seccional
+      const detectSeccionalNumber = (cellValue) => {
+        if (!cellValue) return null;
+        const str = cellValue.toString().toUpperCase();
+        
+        // Buscar patrones como "SECCIONAL 123", "SECC 123", "SEC 123", etc.
+        const patterns = [
+          /SECCIONAL\s*:?\s*(\d+)/i,
+          /SECC\s*:?\s*(\d+)/i,
+          /SEC\s*:?\s*(\d+)/i,
+          /SECCIÓN\s*:?\s*(\d+)/i,
+          /^(\d{3,4})$/ // Número solo de 3-4 dígitos
+        ];
+        
+        for (const pattern of patterns) {
+          const match = str.match(pattern);
+          if (match) return match[1];
+        }
+        return null;
+      };
+
+      // Función para detectar si una fila contiene datos de una persona
+      const isPersonRow = (row) => {
+        console.log(`Analizando fila para persona:`, row);
+        
+        // Una fila de persona debe tener al menos un nombre
+        for (let i = 0; i < row.length; i++) {
+          const cell = row[i];
+          if (cell && typeof cell === 'string' && cell.trim().length > 2) {
+            // Verificar que no sea un encabezado común
+            const cellLower = cell.toLowerCase().trim();
+            const excludeWords = ['promotor', 'nombre', 'curp', 'clave', 'total', 'seccional', '#', 'no.', 'num', 'elector'];
+            
+            const isExcluded = excludeWords.some(word => cellLower.includes(word));
+            
+            console.log(`Celda analizada: "${cell}", excluida: ${isExcluded}`);
+            
+            if (!isExcluded) {
+              console.log(`Fila identificada como persona por celda: "${cell}"`);
+              return true;
+            }
+          }
+        }
+        console.log('Fila NO identificada como persona');
+        return false;
+      };
+
+      // Función para detectar si una fila contiene un promotor
+      const detectPromotor = (row) => {
+        for (let i = 0; i < row.length; i++) {
+          const cell = row[i];
+          if (cell && typeof cell === 'string') {
+            const cellStr = cell.toString().trim();
+            const cellLower = cellStr.toLowerCase();
+            
+            console.log(`Analizando celda para promotor: "${cellStr}" (longitud: ${cellStr.length})`);
+            
+            // Si encuentra la palabra "promotor" seguida de un nombre
+            if (cellLower.includes('promotor') && cellStr.length > 8) {
+              // Extraer el nombre del promotor después de "promotor"
+              const promotorMatch = cellStr.match(/promotor[:\s]*(.+)/i);
+              if (promotorMatch && promotorMatch[1].trim()) {
+                console.log(`Promotor encontrado con patrón: ${promotorMatch[1].trim()}`);
+                return promotorMatch[1].trim();
+              }
+              // Si solo dice "Promotor: Nombre" o similar
+              const afterPromotor = cellStr.substring(cellLower.indexOf('promotor') + 8).replace(/[:]/g, '').trim();
+              if (afterPromotor) {
+                console.log(`Promotor encontrado después de palabra: ${afterPromotor}`);
+                return afterPromotor;
+              }
+            }
+            
+            // Buscar en la celda siguiente si esta celda dice solo "promotor"
+            if (cellLower === 'promotor' || cellLower === 'promotor:') {
+              const nextCell = row[i + 1];
+              if (nextCell && typeof nextCell === 'string' && nextCell.trim().length > 2) {
+                console.log(`Promotor encontrado en celda siguiente: ${nextCell.trim()}`);
+                return nextCell.trim();
+              }
+            }
+            
+            // Si es una celda que contiene un nombre potencial (más de 8 caracteres, contiene espacios)
+            if (cellStr.length > 8 && cellStr.includes(' ') && 
+                !cellLower.includes('seccional') && 
+                !cellLower.includes('total') &&
+                !cellLower.includes('curp') &&
+                !cellLower.includes('clave') &&
+                !cellLower.includes('nombre') &&
+                !cellLower.includes('elector')) {
+              
+              // Verificar si es probable que sea un nombre de promotor
+              // (aparece relativamente solo en la fila)
+              const nonEmptyCells = row.filter(c => c && c.toString().trim());
+              console.log(`Posible promotor por contexto: "${cellStr}", celdas no vacías: ${nonEmptyCells.length}`);
+              
+              if (nonEmptyCells.length <= 4) {
+                console.log(`Promotor detectado por contexto: ${cellStr}`);
+                return cellStr;
+              }
+            }
+          }
+        }
+        return null;
+      };
+
+      // Función para extraer datos de persona de una fila
+      const extractPersonData = (row) => {
+        const datos = {
+          numeroPersona: null,
+          nombreCompleto: null,
+          curp: null,
+          claveElector: null
+        };
+
+        let nameFound = false;
+        
+        for (let i = 0; i < row.length; i++) {
+          const cell = row[i];
+          if (!cell) continue;
+          
+          const cellStr = cell.toString().trim();
+          
+          // Buscar número de persona (1-3 dígitos al inicio)
+          if (!datos.numeroPersona && /^\d{1,3}$/.test(cellStr)) {
+            datos.numeroPersona = parseInt(cellStr);
+          }
+          
+          // Buscar nombre (cadena más larga con espacios)
+          else if (!nameFound && cellStr.length > 5 && cellStr.includes(' ')) {
+            const cellLower = cellStr.toLowerCase();
+            if (!cellLower.includes('promotor') && 
+                !cellLower.includes('seccional') && 
+                !cellLower.includes('curp') &&
+                !cellLower.includes('clave')) {
+              datos.nombreCompleto = cellStr;
+              nameFound = true;
+            }
+          }
+          
+          // Buscar CURP (18 caracteres alfanuméricos)
+          else if (!datos.curp && /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(cellStr.toUpperCase())) {
+            datos.curp = cellStr.toUpperCase();
+          }
+          
+          // Buscar clave de elector (patrón típico)
+          else if (!datos.claveElector && /^[A-Z0-9]{18}$/.test(cellStr.toUpperCase())) {
+            datos.claveElector = cellStr.toUpperCase();
+          }
+          
+          // Si no se encontró CURP, buscar cadenas largas que puedan ser CURP
+          else if (!datos.curp && cellStr.length === 18 && /^[A-Z0-9]+$/i.test(cellStr)) {
+            datos.curp = cellStr.toUpperCase();
+          }
+          
+          // Si no se encontró clave de elector, buscar otras cadenas largas
+          else if (!datos.claveElector && cellStr.length >= 10 && /^[A-Z0-9]+$/i.test(cellStr)) {
+            datos.claveElector = cellStr.toUpperCase();
+          }
+        }
+
+        return datos;
+      };
+
+      console.log('Iniciando procesamiento flexible del Excel...');
+      console.log('Datos completos del Excel:', jsonData);
+      console.log(`Total de filas: ${jsonData.length}`);
+
+      // Primera pasada: buscar número de seccional
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
+        if (!row || row.length === 0) continue;
+
+        // Buscar en toda la fila
+        for (let j = 0; j < row.length; j++) {
+          const detectedNumber = detectSeccionalNumber(row[j]);
+          if (detectedNumber) {
+            seccionalNumber = detectedNumber;
+            console.log(`Número de seccional encontrado: ${seccionalNumber} en fila ${i}, columna ${j}`);
+            break;
+          }
+        }
         
-        // Buscar el número de seccional
-        if (row[0] && typeof row[0] === 'string' && row[0].includes('SECCIONAL')) {
-          const match = row[0].match(/\d+/);
-          if (match) {
-            seccionalNumber = match[0];
-          }
-          continue;
+        if (seccionalNumber) break;
+      }
+
+      // Si no se encontró seccional, pedir al usuario
+      if (!seccionalNumber) {
+        seccionalNumber = prompt('No se pudo detectar automáticamente el número de seccional. Por favor ingresa el número:');
+        if (!seccionalNumber) {
+          alert('Es necesario especificar un número de seccional');
+          return;
         }
+      }
 
-        // Saltar fila de encabezados
-        if (row[0] && typeof row[0] === 'string' && 
-            (row[0].toLowerCase().includes('total') || 
-             row[1] && row[1].toString().toLowerCase().includes('promotor') ||
-             row[2] && row[2].toString().toLowerCase().includes('nombre'))) {
-          console.log(`Saltando fila de encabezados en línea ${i}:`, row);
-          continue;
-        }
+      // Segunda pasada: procesar datos
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || row.length === 0) continue;
 
-        // Procesar filas de datos
-        if (row.length >= 3 && row[1] && row[2]) {
-          const numeroPersona = row[1];
-          const nombreCompleto = row[2];
-          const curp = row[3] || '';
-          const claveElector = row[4] || '';
-          const promotor = row[5];
+        console.log(`Procesando fila ${i}:`, row);
 
-          // Debug: mostrar información de la fila para diagnosticar problemas
-          console.log(`Fila ${i}:`, {
-            numeroPersona,
-            nombreCompleto,
-            curp,
-            claveElector,
-            promotor,
-            filaCompleta: row
-          });
-
-          if (!promotor || promotor.trim() === '' || promotor.toLowerCase() === 'promotor') {
-            console.log(`Saltando fila ${i} porque el promotor está vacío o es el encabezado:`, promotor);
-            continue;
-          }
-
-          if (!promotoresData[promotor]) {
-            promotoresData[promotor] = {
-              nombre: promotor,
+        // Intentar detectar promotor en esta fila
+        const promotorDetectado = detectPromotor(row);
+        if (promotorDetectado) {
+          currentPromotor = promotorDetectado;
+          personaCounter = 1; // Reiniciar contador para cada promotor
+          
+          if (!promotoresData[currentPromotor]) {
+            promotoresData[currentPromotor] = {
+              nombre: currentPromotor,
               personas: {}
             };
           }
-
-          promotoresData[promotor].personas[`persona_${numeroPersona}`] = {
-            numeroPersona,
-            nombreCompleto,
-            curp,
-            claveElector,
-            votoListo: false
-          };
+          
+          console.log(`✅ Promotor detectado: ${currentPromotor} en fila ${i}`);
+          continue;
         }
+
+        // Si hay un promotor actual y esta fila parece contener datos de persona
+        if (currentPromotor && isPersonRow(row)) {
+          const personData = extractPersonData(row);
+          
+          console.log(`Datos extraídos de persona:`, personData);
+          
+          if (personData.nombreCompleto) {
+            // Usar el número detectado o asignar uno secuencial
+            const numeroPersona = personData.numeroPersona || personaCounter;
+            
+            promotoresData[currentPromotor].personas[`persona_${numeroPersona}`] = {
+              numeroPersona: numeroPersona,
+              nombreCompleto: personData.nombreCompleto,
+              curp: personData.curp || '',
+              claveElector: personData.claveElector || '',
+              votoListo: false
+            };
+            
+            console.log(`✅ Persona agregada: ${personData.nombreCompleto} al promotor ${currentPromotor}`);
+            personaCounter++;
+          } else {
+            console.log(`❌ Fila de persona sin nombre completo válido`);
+          }
+        } else {
+          if (!currentPromotor) {
+            console.log(`⚠️ No hay promotor actual para procesar fila ${i}`);
+          }
+        }
+      }
+
+      console.log('Procesamiento completado:', {
+        seccional: seccionalNumber,
+        promotores: Object.keys(promotoresData),
+        totalPersonas: Object.values(promotoresData).reduce((total, promotor) => 
+          total + Object.keys(promotor.personas).length, 0)
+      });
+
+      // Si no se encontraron promotores, intentar método alternativo más simple
+      if (Object.keys(promotoresData).length === 0) {
+        console.log('⚠️ No se encontraron promotores con método principal. Intentando método alternativo...');
+        
+        let fallbackPromotor = 'Promotor General';
+        let fallbackPersonaCounter = 1;
+        
+        // Buscar cualquier fila que tenga datos que parezcan personas
+        for (let i = 0; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || row.length === 0) continue;
+          
+          // Buscar filas con al menos 3 celdas no vacías
+          const nonEmptyCells = row.filter(cell => cell && cell.toString().trim());
+          
+          if (nonEmptyCells.length >= 2) {
+            // Ver si alguna celda parece un nombre (más de 5 caracteres con espacio)
+            const possibleName = nonEmptyCells.find(cell => {
+              const str = cell.toString().trim();
+              return str.length > 5 && str.includes(' ') && 
+                     !str.toLowerCase().includes('seccional') &&
+                     !str.toLowerCase().includes('total') &&
+                     !str.toLowerCase().includes('promotor');
+            });
+            
+            if (possibleName) {
+              // Crear promotor por defecto si no existe
+              if (!promotoresData[fallbackPromotor]) {
+                promotoresData[fallbackPromotor] = {
+                  nombre: fallbackPromotor,
+                  personas: {}
+                };
+                console.log(`✅ Creado promotor de respaldo: ${fallbackPromotor}`);
+              }
+              
+              // Agregar persona
+              promotoresData[fallbackPromotor].personas[`persona_${fallbackPersonaCounter}`] = {
+                numeroPersona: fallbackPersonaCounter,
+                nombreCompleto: possibleName.toString().trim(),
+                curp: '',
+                claveElector: '',
+                votoListo: false
+              };
+              
+              console.log(`✅ Persona agregada con método alternativo: ${possibleName}`);
+              fallbackPersonaCounter++;
+            }
+          }
+        }
+        
+        console.log('Procesamiento alternativo completado:', {
+          promotoresEncontrados: Object.keys(promotoresData).length,
+          personasEncontradas: Object.values(promotoresData).reduce((total, promotor) => 
+            total + Object.keys(promotor.personas).length, 0)
+        });
       }
 
       if (seccionalNumber && Object.keys(promotoresData).length > 0) {
@@ -287,7 +556,7 @@ const GeneralPanel = () => {
           }, { merge: true });
         } else {
           // Si está offline, guardar localmente
-          uploadSeccionalOffline(seccionalNumber, promotoresData);
+          uploadSeccionalOffline(seccionalNumber, promotoresData, currentUser?.email);
         }
 
         alert(`Datos de la Seccional ${seccionalNumber} ${isOnline ? 'subidos' : 'guardados localmente'} exitosamente!`);
@@ -300,6 +569,181 @@ const GeneralPanel = () => {
     }
     setUploading(false);
     event.target.value = '';
+  };
+
+  // Función para crear una nueva seccional
+  const handleCreateSeccional = async () => {
+    if (!newSeccional.numero || !newSeccional.promotor) {
+      alert('Por favor completa todos los campos (número de seccional y promotor)');
+      return;
+    }
+
+    const seccionalNumber = newSeccional.numero;
+    const seccionalId = `seccional_${seccionalNumber}`;
+
+    // Verificar si la seccional ya existe
+    if (seccionales.find(s => s.numero === seccionalNumber)) {
+      alert('Ya existe una seccional con este número');
+      return;
+    }
+
+    const promotoresData = {
+      [newSeccional.promotor]: {
+        nombre: newSeccional.promotor,
+        personas: {}
+      }
+    };
+
+    try {
+      if (isOnline) {
+        // Si está online, crear directamente en Firebase
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        await setDoc(seccionalRef, {
+          numero: seccionalNumber,
+          promotores: promotoresData,
+          fechaActualizacion: new Date().toISOString(),
+          subidoPor: currentUser?.email || 'Usuario desconocido',
+          fechaSubida: new Date().toISOString()
+        });
+      } else {
+        // Si está offline, usar el contexto offline
+        uploadSeccionalOffline(seccionalNumber, promotoresData, currentUser?.email);
+      }
+
+      alert(`Seccional ${seccionalNumber} creada exitosamente con promotor ${newSeccional.promotor}`);
+      setShowCreateSeccionalForm(false);
+      setNewSeccional({ numero: '', promotor: '' });
+    } catch (error) {
+      console.error('Error al crear seccional:', error);
+      alert('Error al crear seccional: ' + error.message);
+    }
+  };
+
+  // Función para agregar un nuevo promotor a una seccional existente
+  const handleAddPromotor = async () => {
+    if (!selectedSeccionalForPromotor || !newPromotor.nombre) {
+      alert('Por favor selecciona una seccional y escribe el nombre del promotor');
+      return;
+    }
+
+    const seccional = seccionales.find(s => s.id === selectedSeccionalForPromotor);
+    if (!seccional) {
+      alert('Seccional no encontrada');
+      return;
+    }
+
+    // Verificar si el promotor ya existe
+    if (seccional.promotores && seccional.promotores[newPromotor.nombre]) {
+      alert('Ya existe un promotor con este nombre en esta seccional');
+      return;
+    }
+
+    try {
+      const updatedSeccional = { ...seccional };
+      if (!updatedSeccional.promotores) {
+        updatedSeccional.promotores = {};
+      }
+      
+      updatedSeccional.promotores[newPromotor.nombre] = {
+        nombre: newPromotor.nombre,
+        personas: {}
+      };
+
+      if (isOnline) {
+        // Si está online, actualizar directamente en Firebase
+        const seccionalRef = doc(db, 'seccionales', selectedSeccionalForPromotor);
+        await updateDoc(seccionalRef, {
+          promotores: updatedSeccional.promotores,
+          fechaActualizacion: new Date().toISOString()
+        });
+      } else {
+        // Si está offline, usar la función offline
+        const success = updateSeccionalOffline(selectedSeccionalForPromotor, updatedSeccional.promotores);
+        
+        if (!success) {
+          alert('Error al agregar promotor offline');
+          return;
+        }
+
+        // Actualizar datos locales también
+        setSeccionales(prevSeccionales =>
+          prevSeccionales.map(s =>
+            s.id === selectedSeccionalForPromotor ? updatedSeccional : s
+          )
+        );
+      }
+
+      alert(`Promotor ${newPromotor.nombre} agregado exitosamente a la seccional ${seccional.numero}`);
+      setShowAddPromotorForm(false);
+      setSelectedSeccionalForPromotor('');
+      setNewPromotor({ nombre: '' });
+    } catch (error) {
+      console.error('Error al agregar promotor:', error);
+      alert('Error al agregar promotor: ' + error.message);
+    }
+  };
+
+  // Función para agregar una nueva persona
+  const handleAddPerson = async () => {
+    if (!selectedSeccional || !selectedPromotor || !newPerson.nombreCompleto) {
+      alert('Por favor completa todos los campos requeridos (seccional, promotor y nombre completo)');
+      return;
+    }
+
+    const seccional = seccionales.find(s => s.id === selectedSeccional);
+    if (!seccional) {
+      alert('Seccional no encontrada');
+      return;
+    }
+
+    try {
+      if (isOnline) {
+        // Si está online, agregar directamente a Firebase
+        const updatedSeccional = { ...seccional };
+        const personId = `persona_${Date.now()}`;
+        
+        if (!updatedSeccional.promotores[selectedPromotor].personas) {
+          updatedSeccional.promotores[selectedPromotor].personas = {};
+        }
+        
+        const numeroPersona = Object.keys(updatedSeccional.promotores[selectedPromotor].personas).length + 1;
+        
+        updatedSeccional.promotores[selectedPromotor].personas[personId] = {
+          numeroPersona,
+          nombreCompleto: newPerson.nombreCompleto,
+          curp: newPerson.curp || '',
+          claveElector: newPerson.claveElector || '',
+          votoListo: false
+        };
+
+        const seccionalRef = doc(db, 'seccionales', selectedSeccional);
+        await updateDoc(seccionalRef, {
+          promotores: updatedSeccional.promotores,
+          fechaActualizacion: new Date().toISOString()
+        });
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = addPersonOffline(selectedSeccional, selectedPromotor, {
+          nombreCompleto: newPerson.nombreCompleto,
+          curp: newPerson.curp || '',
+          claveElector: newPerson.claveElector || ''
+        });
+
+        if (!success) {
+          alert('Error al agregar persona offline');
+          return;
+        }
+      }
+
+      alert(`Persona ${newPerson.nombreCompleto} agregada exitosamente`);
+      setShowAddPersonForm(false);
+      setNewPerson({ nombreCompleto: '', curp: '', claveElector: '' });
+      setSelectedSeccional('');
+      setSelectedPromotor('');
+    } catch (error) {
+      console.error('Error al agregar persona:', error);
+      alert('Error al agregar persona: ' + error.message);
+    }
   };
 
   const isAdmin = currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com';
@@ -389,6 +833,58 @@ const GeneralPanel = () => {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sección de Gestión Manual */}
+        <div className="bg-white rounded-lg shadow mb-8">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-xl font-semibold text-gray-900">Gestión Manual</h2>
+            <p className="text-sm text-gray-600 mt-1">Crear seccionales y agregar personas sin necesidad de Excel</p>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Botón para crear seccional */}
+              <button
+                onClick={() => setShowCreateSeccionalForm(true)}
+                className="flex items-center justify-center p-6 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors duration-200"
+              >
+                <div className="text-center">
+                  <svg className="mx-auto h-8 w-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span className="font-medium">Crear Nueva Seccional</span>
+                </div>
+              </button>
+
+              {/* Botón para agregar promotor */}
+              <button
+                onClick={() => setShowAddPromotorForm(true)}
+                disabled={seccionales.length === 0}
+                className="flex items-center justify-center p-6 border-2 border-dashed border-green-300 rounded-lg text-green-600 hover:border-green-400 hover:bg-green-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="text-center">
+                  <svg className="mx-auto h-8 w-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="font-medium">Agregar Promotor</span>
+                </div>
+              </button>
+
+              {/* Botón para agregar persona */}
+              <button
+                onClick={() => setShowAddPersonForm(true)}
+                disabled={seccionales.length === 0}
+                className="flex items-center justify-center p-6 border-2 border-dashed border-purple-300 rounded-lg text-purple-600 hover:border-purple-400 hover:bg-purple-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="text-center">
+                  <svg className="mx-auto h-8 w-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  <span className="font-medium">Agregar Persona</span>
+                </div>
+              </button>
             </div>
           </div>
         </div>
@@ -716,6 +1212,267 @@ const GeneralPanel = () => {
           ))
         )}
       </div>
+
+      {/* Modal para crear nueva seccional */}
+      {showCreateSeccionalForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Crear Nueva Seccional</h3>
+                <button
+                  onClick={() => setShowCreateSeccionalForm(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Número de Seccional *
+                  </label>
+                  <input
+                    type="text"
+                    value={newSeccional.numero}
+                    onChange={(e) => setNewSeccional({...newSeccional, numero: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Ej: 001, 002, etc."
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nombre del Promotor *
+                  </label>
+                  <input
+                    type="text"
+                    value={newSeccional.promotor}
+                    onChange={(e) => setNewSeccional({...newSeccional, promotor: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Nombre completo del promotor"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowCreateSeccionalForm(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateSeccional}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                >
+                  Crear Seccional
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para agregar promotor */}
+      {showAddPromotorForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Agregar Nuevo Promotor</h3>
+                <button
+                  onClick={() => setShowAddPromotorForm(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Seleccionar Seccional *
+                  </label>
+                  <select
+                    value={selectedSeccionalForPromotor}
+                    onChange={(e) => setSelectedSeccionalForPromotor(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">Selecciona una seccional</option>
+                    {seccionales
+                      .filter(seccional => seccional.subidoPor === currentUser?.email || isAdmin)
+                      .map(seccional => (
+                        <option key={seccional.id} value={seccional.id}>
+                          Seccional {seccional.numero}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nombre del Promotor *
+                  </label>
+                  <input
+                    type="text"
+                    value={newPromotor.nombre}
+                    onChange={(e) => setNewPromotor({...newPromotor, nombre: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Nombre completo del promotor"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowAddPromotorForm(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddPromotor}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"
+                >
+                  Agregar Promotor
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para agregar persona */}
+      {showAddPersonForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Agregar Nueva Persona</h3>
+                <button
+                  onClick={() => setShowAddPersonForm(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Seleccionar Seccional *
+                  </label>
+                  <select
+                    value={selectedSeccional}
+                    onChange={(e) => {
+                      setSelectedSeccional(e.target.value);
+                      setSelectedPromotor(''); // Reset promotor cuando cambia seccional
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Selecciona una seccional</option>
+                    {seccionales
+                      .filter(seccional => seccional.subidoPor === currentUser?.email || isAdmin)
+                      .map(seccional => (
+                        <option key={seccional.id} value={seccional.id}>
+                          Seccional {seccional.numero}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Seleccionar Promotor *
+                  </label>
+                  <select
+                    value={selectedPromotor}
+                    onChange={(e) => setSelectedPromotor(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    disabled={!selectedSeccional}
+                  >
+                    <option value="">Selecciona un promotor</option>
+                    {selectedSeccional && seccionales
+                      .find(s => s.id === selectedSeccional)?.promotores &&
+                      Object.values(seccionales.find(s => s.id === selectedSeccional).promotores)
+                        .map(promotor => (
+                          <option key={promotor.nombre} value={promotor.nombre}>
+                            {promotor.nombre}
+                          </option>
+                        ))
+                    }
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nombre Completo *
+                  </label>
+                  <input
+                    type="text"
+                    value={newPerson.nombreCompleto}
+                    onChange={(e) => setNewPerson({...newPerson, nombreCompleto: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Nombre completo de la persona"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CURP
+                  </label>
+                  <input
+                    type="text"
+                    value={newPerson.curp}
+                    onChange={(e) => setNewPerson({...newPerson, curp: e.target.value.toUpperCase()})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="CURP (opcional)"
+                    maxLength="18"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Clave de Elector
+                  </label>
+                  <input
+                    type="text"
+                    value={newPerson.claveElector}
+                    onChange={(e) => setNewPerson({...newPerson, claveElector: e.target.value.toUpperCase()})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Clave de elector (opcional)"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowAddPersonForm(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddPerson}
+                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700"
+                >
+                  Agregar Persona
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

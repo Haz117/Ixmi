@@ -7,8 +7,11 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
+  const { login, createAdminAccount, getUserRole } = useAuth();
   const navigate = useNavigate();
+
+  const isDevelopment = import.meta.env.DEV;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -16,12 +19,15 @@ const Login = () => {
     try {
       setError('');
       setLoading(true);
-      await login(email, password);
       
-      // Verificar si es admin (puedes cambiar esta lógica según tus necesidades)
-      const isAdmin = email.includes('admin') || email === 'admin@ixmicheck.com';
+      const userCredential = await login(email, password);
+      const user = userCredential.user;
       
-      if (isAdmin) {
+      // Obtener el rol del usuario desde Firestore
+      const userRole = await getUserRole(user.uid);
+      
+      // Redirigir basado en el rol
+      if (userRole === 'admin' || email.includes('admin') || email === 'admin@ixmicheck.com') {
         navigate('/admin');
       } else {
         navigate('/general');
@@ -31,6 +37,18 @@ const Login = () => {
     }
 
     setLoading(false);
+  };
+
+  const handleCreateAdmin = async () => {
+    try {
+      setError('');
+      setCreatingAdmin(true);
+      const result = await createAdminAccount();
+      setError(result.message);
+    } catch (error) {
+      setError('Error al crear cuenta de administrador: ' + error.message);
+    }
+    setCreatingAdmin(false);
   };
 
   return (
@@ -90,6 +108,22 @@ const Login = () => {
             {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </button>
         </form>
+
+        {isDevelopment && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <p className="text-xs text-gray-500 text-center mb-3">
+              Solo en desarrollo
+            </p>
+            <button
+              type="button"
+              onClick={handleCreateAdmin}
+              disabled={creatingAdmin}
+              className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {creatingAdmin ? 'Creando cuenta...' : 'Crear Cuenta Admin (admin@ixmicheck.com)'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

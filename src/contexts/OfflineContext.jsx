@@ -131,6 +131,9 @@ export const OfflineProvider = ({ children }) => {
       case 'UPLOAD_SECCIONAL':
         await uploadSeccionalOnline(operation.data);
         break;
+      case 'UPDATE_SECCIONAL':
+        await updateSeccionalOnline(operation.data);
+        break;
       default:
         throw new Error(`Tipo de operación no reconocido: ${operation.type}`);
     }
@@ -194,13 +197,23 @@ export const OfflineProvider = ({ children }) => {
     await updateDoc(seccionalRef, updatedSeccional);
   };
 
-  const uploadSeccionalOnline = async ({ seccionalNumber, promotoresData }) => {
+  const uploadSeccionalOnline = async ({ seccionalNumber, promotoresData, userEmail }) => {
     const seccionalRef = doc(db, 'seccionales', `seccional_${seccionalNumber}`);
     await setDoc(seccionalRef, {
       numero: seccionalNumber,
       promotores: promotoresData,
-      fechaActualizacion: new Date().toISOString()
+      fechaActualizacion: new Date().toISOString(),
+      subidoPor: userEmail || 'Usuario desconocido',
+      fechaSubida: new Date().toISOString()
     }, { merge: true });
+  };
+
+  const updateSeccionalOnline = async ({ seccionalId, promotores }) => {
+    const seccionalRef = doc(db, 'seccionales', seccionalId);
+    await updateDoc(seccionalRef, {
+      promotores: promotores,
+      fechaActualizacion: new Date().toISOString()
+    });
   };
 
   // Operaciones que funcionan offline
@@ -300,7 +313,7 @@ export const OfflineProvider = ({ children }) => {
     return true;
   };
 
-  const uploadSeccionalOffline = (seccionalNumber, promotoresData) => {
+  const uploadSeccionalOffline = (seccionalNumber, promotoresData, userEmail = null) => {
     const currentData = { ...localData };
     const seccionalId = `seccional_${seccionalNumber}`;
     
@@ -308,7 +321,9 @@ export const OfflineProvider = ({ children }) => {
       id: seccionalId,
       numero: seccionalNumber,
       promotores: promotoresData,
-      fechaActualizacion: new Date().toISOString()
+      fechaActualizacion: new Date().toISOString(),
+      subidoPor: userEmail || 'Usuario desconocido',
+      fechaSubida: new Date().toISOString()
     };
     
     saveLocalData(currentData);
@@ -316,7 +331,29 @@ export const OfflineProvider = ({ children }) => {
     // Agregar operación pendiente
     addPendingOperation({
       type: 'UPLOAD_SECCIONAL',
-      data: { seccionalNumber, promotoresData }
+      data: { seccionalNumber, promotoresData, userEmail }
+    });
+
+    return true;
+  };
+
+  const updateSeccionalOffline = (seccionalId, promotores) => {
+    const currentData = { ...localData };
+    
+    if (!currentData[seccionalId]) {
+      console.error('Seccional no encontrada en datos locales');
+      return false;
+    }
+
+    currentData[seccionalId].promotores = promotores;
+    currentData[seccionalId].fechaActualizacion = new Date().toISOString();
+    
+    saveLocalData(currentData);
+
+    // Agregar operación pendiente
+    addPendingOperation({
+      type: 'UPDATE_SECCIONAL',
+      data: { seccionalId, promotores }
     });
 
     return true;
@@ -358,6 +395,7 @@ export const OfflineProvider = ({ children }) => {
     updatePersonOffline,
     deletePersonOffline,
     uploadSeccionalOffline,
+    updateSeccionalOffline,
     loadDataFromFirebase,
     syncPendingOperations: () => syncPendingOperations()
   };
