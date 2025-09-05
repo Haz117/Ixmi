@@ -6,12 +6,15 @@ import { db } from '../firebase';
 import { collection, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import ConnectionStatus from './ConnectionStatus';
 import SyncButton from './SyncButton';
+import RealtimeNotification from './RealtimeNotification';
+import { useRealtimeNotifications } from '../hooks/useRealtimeNotifications';
 import * as XLSX from 'xlsx';
 
 const GeneralPanel = () => {
   const { currentUser, logout } = useAuth();
   const { 
     isOnline, 
+    realtimeActive,
     loadDataFromFirebase, 
     updateVoteOffline, 
     addPersonOffline, 
@@ -21,6 +24,7 @@ const GeneralPanel = () => {
     updateSeccionalOffline
   } = useOffline();
   const navigate = useNavigate();
+  const { notification, showUpdateNotification, showSuccessNotification, showErrorNotification } = useRealtimeNotifications();
   
   const [seccionales, setSeccionales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +71,7 @@ const GeneralPanel = () => {
   const [diferencia, setDiferencia] = useState(null);
 
   useEffect(() => {
-    // Usar el contexto offline para cargar datos
+    // Usar el contexto offline para cargar datos con notificaciones de tiempo real
     const unsubscribe = loadDataFromFirebase((data) => {
       // Verificar si el usuario es admin
       const isAdmin = currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com';
@@ -118,6 +122,15 @@ const GeneralPanel = () => {
         totalVotos,
         promotores: promotoresStats
       });
+    }, {
+      enableNotifications: true,
+      onUpdate: (message, type) => {
+        if (type === 'update') {
+          showUpdateNotification(message);
+        } else if (type === 'error') {
+          showErrorNotification(message);
+        }
+      }
     });
 
     return () => {
@@ -125,7 +138,7 @@ const GeneralPanel = () => {
         unsubscribe();
       }
     };
-  }, [loadDataFromFirebase, currentUser]);
+  }, [loadDataFromFirebase, currentUser, showUpdateNotification, showErrorNotification]);
 
   const handleLogout = async () => {
     try {
@@ -471,15 +484,169 @@ const GeneralPanel = () => {
     }
   };
 
+  // Función para filtrar personas basada en el término de búsqueda
+  const filterPersonas = (personas, promotorNombre, seccionalNumero) => {
+    if (!searchTerm) return personas;
+    
+    return Object.fromEntries(
+      Object.entries(personas).filter(([, persona]) => {
+        const searchLower = searchTerm.toLowerCase();
+        
+        if (filterBy === 'all') {
+          return (
+            persona.nombreCompleto?.toLowerCase().includes(searchLower) ||
+            persona.curp?.toLowerCase().includes(searchLower) ||
+            persona.claveElector?.toLowerCase().includes(searchLower) ||
+            promotorNombre?.toLowerCase().includes(searchLower) ||
+            seccionalNumero?.toString().includes(searchLower)
+          );
+        } else if (filterBy === 'promotor') {
+          return promotorNombre?.toLowerCase().includes(searchLower);
+        } else if (filterBy === 'seccional') {
+          return seccionalNumero?.toString().includes(searchLower);
+        } else if (filterBy === 'nombre') {
+          return persona.nombreCompleto?.toLowerCase().includes(searchLower);
+        } else if (filterBy === 'curp') {
+          return persona.curp?.toLowerCase().includes(searchLower);
+        } else if (filterBy === 'clave') {
+          return persona.claveElector?.toLowerCase().includes(searchLower);
+        }
+        
+        return false;
+      })
+    );
+  };
+
+  // Función para obtener todas las personas que coinciden con la búsqueda
+  const getFilteredData = () => {
+    if (!searchTerm) return seccionales;
+    
+    return seccionales.map(seccional => {
+      const filteredPromotores = {};
+      
+      if (seccional.promotores) {
+        Object.entries(seccional.promotores).forEach(([promotorId, promotor]) => {
+          if (promotor.personas) {
+            const filteredPersonas = filterPersonas(promotor.personas, promotor.nombre, seccional.numero);
+            
+            if (Object.keys(filteredPersonas).length > 0) {
+              filteredPromotores[promotorId] = {
+                ...promotor,
+                personas: filteredPersonas
+              };
+            }
+          }
+        });
+      }
+      
+      return {
+        ...seccional,
+        promotores: filteredPromotores
+      };
+    }).filter(seccional => Object.keys(seccional.promotores || {}).length > 0);
+  };
+
+  // Función para filtrar promotores en las estadísticas
+  const getFilteredPromotorStats = () => {
+    if (!searchTerm) return stats.promotores;
+    
+    const filtered = {};
+    Object.entries(stats.promotores).forEach(([nombre, data]) => {
+      const searchLower = searchTerm.toLowerCase();
+      
+      if (filterBy === 'all' || filterBy === 'promotor') {
+        if (nombre.toLowerCase().includes(searchLower)) {
+          filtered[nombre] = data;
+        }
+      }
+    });
+    
+    return filtered;
+  };
+
+  // Función para filtrar personas dentro de un promotor específico
+  const getFilteredPersonasForTable = (personas, promotorNombre) => {
+    if (!searchTerm) return personas;
+    
+    return Object.fromEntries(
+      Object.entries(personas).filter(([, persona]) => {
+        const searchLower = searchTerm.toLowerCase();
+        
+        if (filterBy === 'all') {
+          return (
+            persona.nombreCompleto?.toLowerCase().includes(searchLower) ||
+            persona.curp?.toLowerCase().includes(searchLower) ||
+            persona.claveElector?.toLowerCase().includes(searchLower) ||
+            promotorNombre?.toLowerCase().includes(searchLower) ||
+            persona.numeroPersona?.toString().includes(searchLower)
+          );
+        } else if (filterBy === 'nombre') {
+          return persona.nombreCompleto?.toLowerCase().includes(searchLower);
+        } else if (filterBy === 'curp') {
+          return persona.curp?.toLowerCase().includes(searchLower);
+        } else if (filterBy === 'clave') {
+          return persona.claveElector?.toLowerCase().includes(searchLower);
+        } else if (filterBy === 'promotor') {
+          return promotorNombre?.toLowerCase().includes(searchLower);
+        }
+        
+        return false;
+      })
+    );
+  };
+
+  // Función para ordenar personas
+  const getSortedPersonas = (personas) => {
+    const personasArray = Object.entries(personas);
+    
+    switch (sortBy) {
+      case 'alphabetical-asc':
+        return personasArray.sort(([, a], [, b]) => 
+          (a.nombreCompleto || '').localeCompare(b.nombreCompleto || '')
+        );
+      case 'alphabetical-desc':
+        return personasArray.sort(([, a], [, b]) => 
+          (b.nombreCompleto || '').localeCompare(a.nombreCompleto || '')
+        );
+      case 'number-asc':
+        return personasArray.sort(([, a], [, b]) => 
+          (a.numeroPersona || 0) - (b.numeroPersona || 0)
+        );
+      case 'number-desc':
+        return personasArray.sort(([, a], [, b]) => 
+          (b.numeroPersona || 0) - (a.numeroPersona || 0)
+        );
+      case 'newest':
+      case 'oldest':
+        // Para estos casos mantener el orden por número por defecto
+        return personasArray.sort(([, a], [, b]) => 
+          (a.numeroPersona || 0) - (b.numeroPersona || 0)
+        );
+      default: // 'default'
+        return personasArray.sort(([, a], [, b]) => 
+          (a.numeroPersona || 0) - (b.numeroPersona || 0)
+        );
+    }
+  };
+
   const isAdmin = currentUser?.email?.includes('admin') || currentUser?.email === 'admin@ixmicheck.com';
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Notificaciones de tiempo real */}
+      {notification && (
+        <RealtimeNotification 
+          message={notification.message}
+          type={notification.type}
+          duration={notification.duration}
+        />
+      )}
+      
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
+            <div className="flex items-center flex-col sm:flex-row">
               <h1 className="text-3xl font-bold text-gray-900">
                 {isAdmin ? 'Panel General (Vista Admin)' : 'Panel General'}
               </h1>
@@ -742,6 +909,100 @@ const GeneralPanel = () => {
           </div>
         </div>
 
+        {/* Search and Filter Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Buscar en Registros</h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Término de búsqueda
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar por nombre, CURP, clave, promotor o seccional..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filtrar por
+                </label>
+                <select
+                  value={filterBy}
+                  onChange={(e) => setFilterBy(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                >
+                  <option value="all">Todo</option>
+                  <option value="nombre">Nombre</option>
+                  <option value="curp">CURP</option>
+                  <option value="clave">Clave de Elector</option>
+                  <option value="promotor">Promotor</option>
+                  <option value="seccional">Seccional</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ordenar por
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                >
+                  <option value="default">Por defecto (Número)</option>
+                  <option value="alphabetical-asc">Alfabético A-Z</option>
+                  <option value="alphabetical-desc">Alfabético Z-A</option>
+                  <option value="number-asc">Número (menor a mayor)</option>
+                  <option value="number-desc">Número (mayor a menor)</option>
+                  <option value="newest">Más recientes primero</option>
+                  <option value="oldest">Más antiguos primero</option>
+                </select>
+              </div>
+            </div>
+            
+            {searchTerm && (
+              <div className="mt-4 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm text-blue-800">
+                    Mostrando resultados para: "<strong>{searchTerm}</strong>"
+                  </span>
+                </div>
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Limpiar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Estadísticas por Promotor */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
@@ -753,9 +1014,9 @@ const GeneralPanel = () => {
             </div>
           </div>
           <div className="p-4 sm:p-6">
-            {Object.keys(stats.promotores).length > 0 ? (
+            {Object.keys(getFilteredPromotorStats()).length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {Object.entries(stats.promotores).map(([nombre, data]) => (
+                {Object.entries(getFilteredPromotorStats()).map(([nombre, data]) => (
                   <div key={nombre} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow duration-200">
                     <h4 className="font-semibold text-gray-900 text-base sm:text-lg mb-2">{nombre}</h4>
                     <div className="space-y-1">
@@ -788,8 +1049,26 @@ const GeneralPanel = () => {
                 <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                <p className="text-lg font-medium">No hay promotores registrados</p>
-                <p className="text-sm">Sube un archivo Excel para ver las estadísticas por promotor</p>
+                <p className="text-lg font-medium">
+                  {searchTerm ? 'No se encontraron promotores que coincidan' : 'No hay promotores registrados'}
+                </p>
+                <p className="text-sm">
+                  {searchTerm 
+                    ? 'Intenta con un término de búsqueda diferente o ajusta los filtros'
+                    : 'Sube un archivo Excel para ver las estadísticas por promotor'
+                  }
+                </p>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="mt-4 inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Limpiar búsqueda
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -816,8 +1095,39 @@ const GeneralPanel = () => {
               }
             </p>
           </div>
+        ) : getFilteredData().length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 20.5a7.962 7.962 0 01-5.657-2.343m0 0L3.515 15.33M12 6.5a7.962 7.962 0 016.484 3.343L21.314 12" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {searchTerm ? 'No se encontraron resultados' : 'No hay datos disponibles'}
+            </h3>
+            <p className="text-gray-600 max-w-md mx-auto">
+              {searchTerm 
+                ? 'Intenta con un término de búsqueda diferente o ajusta los filtros' 
+                : (isAdmin 
+                  ? 'No hay seccionales en el sistema o sube un archivo Excel para comenzar'
+                  : 'No has subido ninguna seccional aún. Sube un archivo Excel para comenzar'
+                )
+              }
+            </p>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="mt-4 inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Limpiar búsqueda
+              </button>
+            )}
+          </div>
         ) : (
-          seccionales.map((seccional) => (
+          getFilteredData().map((seccional) => (
             <div key={seccional.id} className="bg-white rounded-lg shadow mb-8">
               <div className="px-6 py-4 border-b bg-blue-50">
                 <div className="flex justify-between items-center">
@@ -856,72 +1166,165 @@ const GeneralPanel = () => {
                         </h3>
                         
                         {promotor.personas && Object.keys(promotor.personas).length > 0 ? (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    #
-                                  </th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Nombre Completo
-                                  </th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    CURP
-                                  </th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Clave Elector
-                                  </th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Estado Voto
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                {Object.entries(promotor.personas).map(([personaId, persona]) => (
-                                  <tr key={personaId}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                      {persona.numeroPersona}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                      {persona.nombreCompleto}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                      {persona.curp || 'N/A'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                      {persona.claveElector || 'N/A'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            {/* Filtros para personas dentro del promotor */}
+                            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Buscar en este promotor
+                                  </label>
+                                  <div className="relative">
+                                    <input
+                                      type="text"
+                                      value={searchTerm}
+                                      onChange={(e) => setSearchTerm(e.target.value)}
+                                      placeholder="Buscar persona..."
+                                      className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                    {searchTerm && (
                                       <button
-                                        onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
-                                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer ${
-                                          persona.votoListo
-                                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                            : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                                        }`}
+                                        onClick={() => setSearchTerm('')}
+                                        className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
                                       >
-                                        {persona.votoListo ? (
-                                          <>
-                                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            Voto Listo
-                                          </>
-                                        ) : (
-                                          <>
-                                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            Pendiente
-                                          </>
-                                        )}
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
                                       </button>
-                                    </td>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Filtrar por
+                                  </label>
+                                  <select
+                                    value={filterBy}
+                                    onChange={(e) => setFilterBy(e.target.value)}
+                                    className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="all">Todo</option>
+                                    <option value="nombre">Nombre</option>
+                                    <option value="curp">CURP</option>
+                                    <option value="clave">Clave Elector</option>
+                                    <option value="promotor">Promotor</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Ordenar por
+                                  </label>
+                                  <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="default">Por defecto (#)</option>
+                                    <option value="alphabetical-asc">A-Z</option>
+                                    <option value="alphabetical-desc">Z-A</option>
+                                    <option value="number-asc"># Menor a Mayor</option>
+                                    <option value="number-desc"># Mayor a Menor</option>
+                                  </select>
+                                </div>
+                              </div>
+                              
+                              {searchTerm && (
+                                <div className="mt-3 text-xs text-blue-600">
+                                  <span>Filtrando por: "<strong>{searchTerm}</strong>"</span>
+                                  <span className="ml-2 text-gray-500">
+                                    ({Object.keys(getFilteredPersonasForTable(promotor.personas, promotor.nombre)).length} resultados)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      #
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Nombre Completo
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      CURP
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Clave Elector
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Estado Voto
+                                    </th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {(() => {
+                                    const filteredPersonas = getFilteredPersonasForTable(promotor.personas, promotor.nombre);
+                                    const sortedPersonas = getSortedPersonas(filteredPersonas);
+                                    
+                                    if (sortedPersonas.length === 0) {
+                                      return (
+                                        <tr>
+                                          <td colSpan="5" className="px-6 py-8 text-center text-sm text-gray-500">
+                                            {searchTerm 
+                                              ? `No se encontraron personas que coincidan con "${searchTerm}"`
+                                              : 'No hay personas registradas para este promotor'
+                                            }
+                                          </td>
+                                        </tr>
+                                      );
+                                    }
+                                    
+                                    return sortedPersonas.map(([personaId, persona]) => (
+                                      <tr key={personaId}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                          {persona.numeroPersona}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                          {persona.nombreCompleto}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                          {persona.curp || 'N/A'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                          {persona.claveElector || 'N/A'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                          <button
+                                            onClick={() => handleVotoToggle(seccional.id, promotorId, personaId, persona.votoListo)}
+                                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer ${
+                                              persona.votoListo
+                                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                                : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                                            }`}
+                                          >
+                                            {persona.votoListo ? (
+                                              <>
+                                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                Voto Listo
+                                              </>
+                                            ) : (
+                                              <>
+                                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Pendiente
+                                              </>
+                                            )}
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ));
+                                  })()}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
                         ) : (
                           <p className="text-gray-500">No hay personas registradas para este promotor.</p>

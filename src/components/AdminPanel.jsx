@@ -6,12 +6,15 @@ import { db } from '../firebase';
 import { collection, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import ConnectionStatus from './ConnectionStatus';
 import SyncButton from './SyncButton';
+import RealtimeNotification from './RealtimeNotification';
+import { useRealtimeNotifications } from '../hooks/useRealtimeNotifications';
 import * as XLSX from 'xlsx';
 
 const AdminPanel = () => {
   const { currentUser, logout, signup } = useAuth();
   const { 
     isOnline, 
+    realtimeActive,
     loadDataFromFirebase, 
     updateVoteOffline, 
     addPersonOffline, 
@@ -20,6 +23,7 @@ const AdminPanel = () => {
     uploadSeccionalOffline
   } = useOffline();
   const navigate = useNavigate();
+  const { notification, showUpdateNotification, showSuccessNotification, showErrorNotification } = useRealtimeNotifications();
   
   const [seccionales, setSeccionales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +52,10 @@ const AdminPanel = () => {
     password: '',
     confirmPassword: ''
   });
+  
+  // Estado para la vista de fechas
+  const [viewMode, setViewMode] = useState('fechas'); // 'fechas' o 'semanas'
+  const [collapsedGroups, setCollapsedGroups] = useState({}); // Para controlar grupos colapsados
   const [stats, setStats] = useState({
     totalPersonas: 0,
     totalVotos: 0,
@@ -68,7 +76,7 @@ const AdminPanel = () => {
       return;
     }
 
-    // Usar el contexto offline para cargar datos
+    // Usar el contexto offline para cargar datos con notificaciones en tiempo real
     const unsubscribe = loadDataFromFirebase((data) => {
       setSeccionales(data);
       setLoading(false);
@@ -117,6 +125,15 @@ const AdminPanel = () => {
         totalVotos,
         seccionales: seccionalesStats
       });
+    }, {
+      enableNotifications: true,
+      onUpdate: (message, type) => {
+        if (type === 'update') {
+          showUpdateNotification(message);
+        } else if (type === 'error') {
+          showErrorNotification(message);
+        }
+      }
     });
 
     return () => {
@@ -124,7 +141,7 @@ const AdminPanel = () => {
         unsubscribe();
       }
     };
-  }, [currentUser, navigate, loadDataFromFirebase]);
+  }, [currentUser, navigate, loadDataFromFirebase, showUpdateNotification, showErrorNotification]);
 
   const handleLogout = async () => {
     try {
@@ -597,6 +614,287 @@ const AdminPanel = () => {
     setShowSeccionalModal(true);
   };
 
+  // Función para agrupar seccionales por fecha
+  const groupByDate = () => {
+    const grouped = {};
+    
+    Object.values(stats.seccionales).forEach(seccional => {
+      // Buscar la seccional completa para obtener la fecha
+      const seccionalCompleta = seccionales.find(s => s.numero === seccional.numero);
+      if (!seccionalCompleta) return;
+      
+      const fecha = seccionalCompleta.fechaSubida || seccionalCompleta.fechaActualizacion || new Date().toISOString();
+      const fechaKey = new Date(fecha).toLocaleDateString('es-ES');
+      
+      if (!grouped[fechaKey]) {
+        grouped[fechaKey] = {
+          fecha: fechaKey,
+          seccionales: [],
+          totalPersonas: 0,
+          totalVotos: 0
+        };
+      }
+      
+      grouped[fechaKey].seccionales.push({
+        ...seccional,
+        fechaOriginal: fecha
+      });
+      grouped[fechaKey].totalPersonas += seccional.totalPersonas;
+      grouped[fechaKey].totalVotos += seccional.totalVotos;
+    });
+    
+    return Object.values(grouped).sort((a, b) => new Date(b.seccionales[0].fechaOriginal) - new Date(a.seccionales[0].fechaOriginal));
+  };
+
+  // Función para agrupar seccionales por semana
+  const groupByWeek = () => {
+    const grouped = {};
+    
+    Object.values(stats.seccionales).forEach(seccional => {
+      // Buscar la seccional completa para obtener la fecha
+      const seccionalCompleta = seccionales.find(s => s.numero === seccional.numero);
+      if (!seccionalCompleta) return;
+      
+      const fecha = new Date(seccionalCompleta.fechaSubida || seccionalCompleta.fechaActualizacion || new Date());
+      
+      // Calcular el inicio de la semana (lunes)
+      const inicioSemana = new Date(fecha);
+      const dia = inicioSemana.getDay();
+      const diferencia = dia === 0 ? -6 : 1 - dia; // Si es domingo, retroceder 6 días
+      inicioSemana.setDate(inicioSemana.getDate() + diferencia);
+      
+      // Calcular el fin de la semana (domingo)
+      const finSemana = new Date(inicioSemana);
+      finSemana.setDate(finSemana.getDate() + 6);
+      
+      const semanaKey = `${inicioSemana.toLocaleDateString('es-ES')} - ${finSemana.toLocaleDateString('es-ES')}`;
+      
+      if (!grouped[semanaKey]) {
+        grouped[semanaKey] = {
+          semana: semanaKey,
+          fechaInicio: inicioSemana,
+          seccionales: [],
+          totalPersonas: 0,
+          totalVotos: 0
+        };
+      }
+      
+      grouped[semanaKey].seccionales.push({
+        ...seccional,
+        fechaOriginal: fecha
+      });
+      grouped[semanaKey].totalPersonas += seccional.totalPersonas;
+      grouped[semanaKey].totalVotos += seccional.totalVotos;
+    });
+    
+    return Object.values(grouped).sort((a, b) => new Date(b.fechaInicio) - new Date(a.fechaInicio));
+  };
+
+  // Función para alternar el colapso de un grupo
+  const toggleGroupCollapse = (groupId) => {
+    setCollapsedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
+    }));
+  };
+
+  // Función para colapsar todos los grupos
+  const collapseAll = () => {
+    const data = viewMode === 'fechas' ? groupByDate() : groupByWeek();
+    const allCollapsed = {};
+    data.forEach((grupo) => {
+      const groupId = viewMode === 'fechas' ? grupo.fecha : grupo.semana;
+      allCollapsed[groupId] = true;
+    });
+    setCollapsedGroups(allCollapsed);
+  };
+
+  // Función para expandir todos los grupos
+  const expandAll = () => {
+    setCollapsedGroups({});
+  };
+
+  // Función para renderizar la vista por fechas
+  const renderDateView = () => {
+    const data = viewMode === 'fechas' ? groupByDate() : groupByWeek();
+    
+    if (data.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p className="text-gray-600">No hay seccionales registradas</p>
+          <p className="text-sm text-gray-500 mt-1">Sube un archivo Excel para comenzar</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Controles para colapsar/expandir todos */}
+        <div className="flex justify-end space-x-2">
+          <button
+            onClick={collapseAll}
+            className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            </svg>
+            Colapsar Todo
+          </button>
+          <button
+            onClick={expandAll}
+            className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+            </svg>
+            Expandir Todo
+          </button>
+        </div>
+
+        {/* Grupos de fechas/semanas */}
+        <div className="space-y-4">
+          {data.map((grupo, index) => {
+            const groupId = viewMode === 'fechas' ? grupo.fecha : grupo.semana;
+            const isCollapsed = collapsedGroups[groupId];
+            
+            return (
+              <div key={index} className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+                {/* Header del grupo - siempre visible */}
+                <div 
+                  className="p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => toggleGroupCollapse(groupId)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <button className="flex items-center mr-3 p-1 rounded-full hover:bg-gray-200">
+                        <svg 
+                          className={`w-5 h-5 text-gray-500 transform transition-transform ${
+                            isCollapsed ? '-rotate-90' : 'rotate-0'
+                          }`} 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
+                      </svg>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {viewMode === 'fechas' ? grupo.fecha : grupo.semana}
+                      </h3>
+                    </div>
+                    
+                    <div className="flex items-center space-x-4">
+                      {/* Estadísticas resumidas */}
+                      <div className="hidden sm:flex items-center space-x-4 text-sm text-gray-600">
+                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                          {grupo.totalPersonas} afiliados
+                        </span>
+                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                          {grupo.totalVotos} votos
+                        </span>
+                        <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                          {grupo.totalPersonas > 0 ? Math.round((grupo.totalVotos / grupo.totalPersonas) * 100) : 0}%
+                        </span>
+                      </div>
+                      
+                      <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full border">
+                        {grupo.seccionales.length} seccional{grupo.seccionales.length !== 1 ? 'es' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Estadísticas móviles (visible solo en pantallas pequeñas) */}
+                  <div className="sm:hidden mt-3 flex justify-center space-x-2 text-sm">
+                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
+                      {grupo.totalPersonas} afiliados
+                    </span>
+                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
+                      {grupo.totalVotos} votos
+                    </span>
+                    <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">
+                      {grupo.totalPersonas > 0 ? Math.round((grupo.totalVotos / grupo.totalPersonas) * 100) : 0}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Contenido colapsable */}
+                {!isCollapsed && (
+                  <div className="px-4 pb-4">
+                    {/* Estadísticas detalladas */}
+                    <div className="grid grid-cols-3 gap-4 mb-4 bg-white rounded-lg p-3 border">
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600">Total Afiliados</p>
+                        <p className="text-lg font-semibold text-blue-600">{grupo.totalPersonas}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600">Total Votos</p>
+                        <p className="text-lg font-semibold text-green-600">{grupo.totalVotos}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600">Porcentaje</p>
+                        <p className="text-lg font-semibold text-purple-600">
+                          {grupo.totalPersonas > 0 ? Math.round((grupo.totalVotos / grupo.totalPersonas) * 100) : 0}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Seccionales en este grupo */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {grupo.seccionales.map((seccional) => (
+                        <div 
+                          key={seccional.numero} 
+                          className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer group"
+                          onClick={() => handleSeccionalClick(seccional)}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                              Seccional {seccional.numero}
+                            </h4>
+                            <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                          <div className="space-y-1 text-sm">
+                            <p className="text-gray-600">
+                              <span className="font-medium">Afiliados:</span> {seccional.totalPersonas}
+                            </p>
+                            <p className="text-gray-600">
+                              <span className="font-medium">Votaron:</span> {seccional.totalVotos}
+                            </p>
+                          </div>
+                          <div className="mt-2">
+                            <div className="flex justify-between text-xs text-gray-600 mb-1">
+                              <span>Progreso</span>
+                              <span>{seccional.porcentaje}%</span>
+                            </div>
+                            <div className="bg-gray-200 rounded-full h-1.5">
+                              <div 
+                                className="bg-gradient-to-r from-blue-500 to-blue-600 h-1.5 rounded-full transition-all duration-300"
+                                style={{ width: `${seccional.porcentaje}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
 
 
   if (loading) {
@@ -613,11 +911,23 @@ const AdminPanel = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       <ConnectionStatus />
+      
+      {/* Notificaciones de tiempo real */}
+      {notification && (
+        <RealtimeNotification 
+          message={notification.message}
+          type={notification.type}
+          duration={notification.duration}
+        />
+      )}
+      
       {/* Header */}
       <header className="bg-white shadow-lg border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 space-y-4 sm:space-y-0">
-            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Panel de Administrador</h1>
+            <div className="flex flex-col">
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Panel de Administrador</h1>
+            </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <button
                 onClick={() => setShowAddPersonForm(!showAddPersonForm)}
@@ -800,70 +1110,42 @@ const AdminPanel = () => {
           </div>
         </div>
 
-        {/* Estadísticas Generales por Seccional */}
+        {/* Estadísticas por Fechas */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas Generales por Seccional</h2>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
+                </svg>
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Estadísticas por Fechas</h2>
+              </div>
+              <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setViewMode('fechas')}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                    viewMode === 'fechas' 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Por Fechas
+                </button>
+                <button
+                  onClick={() => setViewMode('semanas')}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                    viewMode === 'semanas' 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Por Semanas
+                </button>
+              </div>
             </div>
           </div>
           <div className="p-4 sm:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {Object.values(stats.seccionales).map((seccional) => (
-                <div 
-                  key={seccional.numero} 
-                  className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer group"
-                  onClick={() => handleSeccionalClick(seccional)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-gray-900 text-base sm:text-lg group-hover:text-blue-600 transition-colors">
-                      Seccional {seccional.numero}
-                    </h4>
-                    <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm sm:text-base text-gray-600">
-                      <span className="font-medium">Afiliados:</span> {seccional.totalPersonas}
-                    </p>
-                    <p className="text-sm sm:text-base text-gray-600">
-                      <span className="font-medium">Votaron:</span> {seccional.totalVotos}
-                    </p>
-                  </div>
-                  <div className="mt-3">
-                    <div className="flex justify-between text-sm text-gray-600 mb-1">
-                      <span>Progreso</span>
-                      <span>{seccional.porcentaje}%</span>
-                    </div>
-                    <div className="bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${seccional.porcentaje}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500 group-hover:text-blue-500 transition-colors">
-                    Clic para ver detalles
-                  </div>
-                </div>
-              ))}
-              
-              {Object.keys(stats.seccionales).length === 0 && (
-                <div className="col-span-full text-center py-8">
-                  <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-600">No hay seccionales registradas</p>
-                  <p className="text-sm text-gray-500 mt-1">Sube un archivo Excel para comenzar</p>
-                </div>
-              )}
-            </div>
+            {renderDateView()}
           </div>
         </div>
 

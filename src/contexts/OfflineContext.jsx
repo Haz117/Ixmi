@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
@@ -13,17 +13,22 @@ export const OfflineProvider = ({ children }) => {
   const [pendingOperations, setPendingOperations] = useState([]);
   const [localData, setLocalData] = useState({});
   const [syncing, setSyncing] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState(null);
+  const [realtimeActive, setRealtimeActive] = useState(false);
+  const [notificationsMuted, setNotificationsMuted] = useState(false);
 
   // Detectar cambios en el estado de conexión
   useEffect(() => {
     const handleOnline = () => {
       console.log('Conexión restablecida');
       setIsOnline(true);
+      // Al reconectar, los listeners se restablecerán automáticamente
     };
 
     const handleOffline = () => {
       console.log('Conexión perdida');
       setIsOnline(false);
+      setRealtimeActive(false);
     };
 
     window.addEventListener('online', handleOnline);
@@ -62,6 +67,7 @@ export const OfflineProvider = ({ children }) => {
     if (isOnline && pendingOperations.length > 0) {
       syncPendingOperations();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, pendingOperations]);
 
   // Guardar datos en localStorage
@@ -83,6 +89,32 @@ export const OfflineProvider = ({ children }) => {
     
     setSyncing(true);
     console.log('Iniciando sincronización de', pendingOperations.length, 'operaciones pendientes');
+
+    // Función para ejecutar operación específica
+    const executeOperation = async (operation) => {
+      switch (operation.type) {
+        case 'UPDATE_VOTE':
+          await updateVoteOnline(operation.data);
+          break;
+        case 'ADD_PERSON':
+          await addPersonOnline(operation.data);
+          break;
+        case 'UPDATE_PERSON':
+          await updatePersonOnline(operation.data);
+          break;
+        case 'DELETE_PERSON':
+          await deletePersonOnline(operation.data);
+          break;
+        case 'UPLOAD_SECCIONAL':
+          await uploadSeccionalOnline(operation.data);
+          break;
+        case 'UPDATE_SECCIONAL':
+          await updateSeccionalOnline(operation.data);
+          break;
+        default:
+          throw new Error(`Tipo de operación no reconocido: ${operation.type}`);
+      }
+    };
 
     const successfulOperations = [];
     const failedOperations = [];
@@ -110,32 +142,6 @@ export const OfflineProvider = ({ children }) => {
     
     if (failedOperations.length > 0) {
       console.warn(`${failedOperations.length} operaciones no pudieron sincronizarse`);
-    }
-  };
-
-  // Ejecutar una operación específica
-  const executeOperation = async (operation) => {
-    switch (operation.type) {
-      case 'UPDATE_VOTE':
-        await updateVoteOnline(operation.data);
-        break;
-      case 'ADD_PERSON':
-        await addPersonOnline(operation.data);
-        break;
-      case 'UPDATE_PERSON':
-        await updatePersonOnline(operation.data);
-        break;
-      case 'DELETE_PERSON':
-        await deletePersonOnline(operation.data);
-        break;
-      case 'UPLOAD_SECCIONAL':
-        await uploadSeccionalOnline(operation.data);
-        break;
-      case 'UPDATE_SECCIONAL':
-        await updateSeccionalOnline(operation.data);
-        break;
-      default:
-        throw new Error(`Tipo de operación no reconocido: ${operation.type}`);
     }
   };
 
@@ -360,35 +366,154 @@ export const OfflineProvider = ({ children }) => {
   };
 
   // Cargar datos desde Firebase cuando esté online
-  const loadDataFromFirebase = (callback) => {
+  const loadDataFromFirebase = useCallback((callback, options = {}) => {
+    const { enableNotifications = false, onUpdate = null } = options;
+    
+    console.log('🔍 DEBUG: loadDataFromFirebase llamado - isOnline:', isOnline, 'enableNotifications:', enableNotifications);
+    
     if (!isOnline) {
       // Si está offline, usar datos locales
+      console.log('📱 Usando datos locales (offline)');
       const seccionalesArray = Object.values(localData).sort((a, b) => a.numero - b.numero);
       callback(seccionalesArray);
+      setRealtimeActive(false);
       return () => {};
     }
 
-    // Si está online, suscribirse a Firebase y actualizar datos locales
-    const unsubscribe = onSnapshot(collection(db, 'seccionales'), (snapshot) => {
-      const seccionalesData = [];
-      const newLocalData = {};
-      
-      snapshot.forEach((doc) => {
-        const data = { id: doc.id, ...doc.data() };
-        seccionalesData.push(data);
-        newLocalData[doc.id] = data;
-      });
-      
-      saveLocalData(newLocalData);
-      callback(seccionalesData.sort((a, b) => a.numero - b.numero));
-    });
+    // Usar ref local para evitar problemas de closure
+    let initialLoad = true;
+    setRealtimeActive(true);
+    console.log('🔄 Iniciando conexión en tiempo real con Firestore...');
 
-    return unsubscribe;
-  };
+    // Si está online, suscribirse a Firebase y actualizar datos locales
+    const unsubscribe = onSnapshot(
+      collection(db, 'seccionales'), 
+      (snapshot) => {
+        const currentTime = new Date().toISOString();
+        
+        console.log('🔄 Actualizando datos en tiempo real...', snapshot.docs.length, 'documentos');
+        console.log('🔍 DEBUG: initialLoad =', initialLoad, 'enableNotifications =', enableNotifications);
+        
+        const seccionalesData = [];
+        const newLocalData = {};
+        
+        // Solo detectar cambios si NO es la carga inicial
+        let changes = {
+          added: [],
+          modified: [],
+          removed: []
+        };
+        
+        // Si no es la primera carga Y hay datos locales previos, detectar cambios reales
+        if (!initialLoad && Object.keys(localData).length > 0) {
+          console.log('🔍 DEBUG: Detectando cambios, docChanges:', snapshot.docChanges().length);
+          snapshot.docChanges().forEach((change) => {
+            const docData = change.doc.data();
+            console.log('🔍 DEBUG: Cambio detectado:', change.type, 'ID:', change.doc.id);
+            
+            if (change.type === 'added') {
+              // Solo considerar como "agregado" si realmente no existía antes
+              if (!localData[change.doc.id]) {
+                changes.added.push(docData);
+                console.log('✅ Nuevo documento agregado:', change.doc.id);
+              }
+            }
+            if (change.type === 'modified') {
+              changes.modified.push(docData);
+              console.log('✏️ Documento modificado:', change.doc.id);
+            }
+            if (change.type === 'removed') {
+              changes.removed.push(docData);
+              console.log('❌ Documento eliminado:', change.doc.id);
+            }
+          });
+        } else {
+          console.log('🔍 DEBUG: Saltando detección de cambios - initialLoad:', initialLoad, 'localData length:', Object.keys(localData).length);
+        }
+        
+        snapshot.forEach((doc) => {
+          const data = { 
+            id: doc.id, 
+            ...doc.data(),
+            lastUpdated: currentTime
+          };
+          seccionalesData.push(data);
+          newLocalData[doc.id] = data;
+        });
+        
+        // Actualizar datos locales
+        saveLocalData(newLocalData);
+        setLastUpdateTime(currentTime);
+        
+        // Solo notificar si NO es la carga inicial Y hay cambios reales Y las notificaciones no están silenciadas
+        if (!initialLoad && enableNotifications && onUpdate && !notificationsMuted) {
+          let notificationMessage = '';
+          
+          console.log('🔍 DEBUG: Procesando notificaciones - changes:', changes);
+          
+          if (changes.added.length > 0) {
+            notificationMessage += `${changes.added.length} nueva(s) seccional(es) agregada(s). `;
+          }
+          if (changes.modified.length > 0) {
+            notificationMessage += `${changes.modified.length} seccional(es) actualizada(s). `;
+          }
+          if (changes.removed.length > 0) {
+            notificationMessage += `${changes.removed.length} seccional(es) eliminada(s). `;
+          }
+          
+          if (notificationMessage.trim()) {
+            console.log('📢 Enviando notificación:', notificationMessage.trim());
+            onUpdate(notificationMessage.trim(), 'update');
+          } else {
+            console.log('🔍 DEBUG: No hay mensaje de notificación para enviar');
+          }
+        } else {
+          console.log('🔍 DEBUG: Saltando notificaciones - initialLoad:', initialLoad, 'enableNotifications:', enableNotifications, 'onUpdate:', !!onUpdate, 'notificationsMuted:', notificationsMuted);
+        }
+        
+        // Marcar que ya no es la carga inicial después de la primera actualización
+        if (initialLoad) {
+          initialLoad = false;
+          console.log('✅ Carga inicial completada, activando detección de cambios');
+        }
+        
+        const sortedData = seccionalesData.sort((a, b) => a.numero - b.numero);
+        
+        if (initialLoad) {
+          console.log('✅ Datos iniciales cargados en tiempo real');
+        } else if (changes.added.length || changes.modified.length || changes.removed.length) {
+          console.log('✅ Cambios detectados en tiempo real:', changes);
+        }
+        
+        callback(sortedData);
+      },
+      (error) => {
+        console.error('❌ Error en tiempo real:', error);
+        setRealtimeActive(false);
+        
+        if (enableNotifications && onUpdate) {
+          onUpdate('Error en la conexión en tiempo real, usando datos locales', 'error');
+        }
+        
+        // En caso de error, usar datos locales como fallback
+        const seccionalesArray = Object.values(localData).sort((a, b) => a.numero - b.numero);
+        callback(seccionalesArray);
+      }
+    );
+
+    return () => {
+      console.log('🔌 Desconectando listener de tiempo real');
+      setRealtimeActive(false);
+      unsubscribe();
+    };
+  }, [isOnline, localData, notificationsMuted]);
 
   const value = {
     isOnline,
     syncing,
+    realtimeActive,
+    lastUpdateTime,
+    notificationsMuted,
     pendingOperations: pendingOperations.length,
     updateVoteOffline,
     addPersonOffline,
@@ -397,7 +522,10 @@ export const OfflineProvider = ({ children }) => {
     uploadSeccionalOffline,
     updateSeccionalOffline,
     loadDataFromFirebase,
-    syncPendingOperations: () => syncPendingOperations()
+    syncPendingOperations: () => syncPendingOperations(),
+    muteNotifications: () => setNotificationsMuted(true),
+    unmuteNotifications: () => setNotificationsMuted(false),
+    toggleNotifications: () => setNotificationsMuted(!notificationsMuted)
   };
 
   return (
