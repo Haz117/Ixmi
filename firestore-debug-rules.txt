@@ -1,0 +1,30 @@
+// REGLAS DE FIRESTORE PARA DEBUGGEAR
+// Ve a Firebase Console > Firestore Database > Rules
+// Copia y pega estas reglas TEMPORALMENTE para diagnosticar
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // REGLAS TEMPORALES MUY PERMISIVAS - SOLO PARA DEBUGGEAR
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+
+// NOTA: Estas reglas son inseguras pero necesarias para diagnosticar
+// Una vez que funcione el tiempo real, cambiar por reglas más seguras:
+
+/*
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /seccionales/{document} {
+      allow read, write: if request.auth != null;
+    }
+    match /users/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == document;
+    }
+  }
+}
+*/

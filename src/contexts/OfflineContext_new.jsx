@@ -55,9 +55,13 @@ export const OfflineProvider = ({ children }) => {
     }
   }, []);
 
+  // Guardar datos en localStorage
+  const saveLocalData = (data) => {
+    setLocalData(data);
+    localStorage.setItem('ixmicheck_offline_data', JSON.stringify(data));
+  };
 
-
-  // FUNCIÓN PRINCIPAL DE TIEMPO REAL - ARREGLADA
+  // FUNCIÓN PRINCIPAL DE TIEMPO REAL - SIMPLIFICADA
   const loadDataFromFirebase = useCallback((callback, options = {}) => {
     const { enableNotifications = false, onUpdate = null } = options;
     
@@ -68,9 +72,7 @@ export const OfflineProvider = ({ children }) => {
     // Verificar estado básico
     if (!isOnline) {
       console.log('📱 [REALTIME] Modo offline');
-      // Obtener datos actuales del estado sin dependencias
-      const currentLocalData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
-      const offlineData = Object.values(currentLocalData).sort((a, b) => a.numero - b.numero);
+      const offlineData = Object.values(localData).sort((a, b) => a.numero - b.numero);
       callback(offlineData);
       setRealtimeActive(false);
       return () => {};
@@ -140,9 +142,8 @@ export const OfflineProvider = ({ children }) => {
           }
         }
         
-        // Actualizar datos directamente sin usar el estado que causa el loop
-        setLocalData(newLocalData);
-        localStorage.setItem('ixmicheck_offline_data', JSON.stringify(newLocalData));
+        // Actualizar datos
+        saveLocalData(newLocalData);
         setLastUpdateTime(new Date().toISOString());
         
         // Enviar a callback
@@ -170,9 +171,8 @@ export const OfflineProvider = ({ children }) => {
           if (onUpdate) onUpdate('Usuario no autenticado', 'error');
         }
         
-        // Fallback a datos locales desde localStorage
-        const currentLocalData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
-        const fallbackData = Object.values(currentLocalData).sort((a, b) => a.numero - b.numero);
+        // Fallback a datos locales
+        const fallbackData = Object.values(localData).sort((a, b) => a.numero - b.numero);
         callback(fallbackData);
       }
     );
@@ -184,24 +184,21 @@ export const OfflineProvider = ({ children }) => {
       setRealtimeActive(false);
       if (unsubscribe) unsubscribe();
     };
-  }, [isOnline, notificationsMuted]); // ELIMINAMOS localData de las dependencias
+  }, [isOnline, localData, notificationsMuted]);
 
   // Operaciones offline básicas
   const updateVoteOffline = (seccionalId, promotorId, personaId, votoListo) => {
-    const currentData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
-    const updatedData = { ...currentData };
+    const updatedData = { ...localData };
     if (updatedData[seccionalId]?.promotores?.[promotorId]?.personas?.[personaId]) {
       updatedData[seccionalId].promotores[promotorId].personas[personaId].votoListo = votoListo;
-      setLocalData(updatedData);
-      localStorage.setItem('ixmicheck_offline_data', JSON.stringify(updatedData));
+      saveLocalData(updatedData);
     }
   };
 
   // Operaciones online básicas
   const updateVoteOnline = async ({ seccionalId, promotorId, personaId, votoListo }) => {
     const seccionalRef = doc(db, 'seccionales', seccionalId);
-    const currentLocalData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
-    const currentData = currentLocalData[seccionalId] || {};
+    const currentData = localData[seccionalId] || {};
     
     if (currentData.promotores?.[promotorId]?.personas?.[personaId]) {
       const updatedPersonas = {

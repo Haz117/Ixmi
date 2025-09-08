@@ -92,13 +92,20 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('🔍 AUTH DEBUG: Estado de autenticación cambió:', user ? user.email : 'No user');
       setCurrentUser(user);
       
       if (user) {
+        console.log('🔍 AUTH DEBUG: Usuario autenticado - UID:', user.uid);
+        console.log('🔍 AUTH DEBUG: Email:', user.email);
+        console.log('🔍 AUTH DEBUG: Email verified:', user.emailVerified);
+        
         // Obtener el rol del usuario cuando se autentica
         const role = await getUserRole(user.uid);
+        console.log('🔍 AUTH DEBUG: Rol obtenido:', role);
         setUserRole(role);
       } else {
+        console.log('🔍 AUTH DEBUG: Usuario desconectado');
         setUserRole(null);
       }
       
