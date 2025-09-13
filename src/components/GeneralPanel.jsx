@@ -484,6 +484,128 @@ const GeneralPanel = () => {
     }
   };
 
+  // Función para eliminar persona
+  const handleDeletePerson = async (seccionalId, promotorId, personaId, personaNombre) => {
+    const seccional = seccionales.find(s => s.id === seccionalId);
+    
+    // Verificar que el usuario puede eliminar (debe ser admin o el que subió la seccional)
+    if (!isAdmin && seccional?.subidoPor !== currentUser?.email) {
+      alert('Solo puedes eliminar personas de seccionales que tú hayas subido');
+      return;
+    }
+
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar a "${personaNombre}"?`)) {
+      return;
+    }
+
+    try {
+      if (isOnline) {
+        // Si está online, eliminar directamente de Firebase
+        const updatedSeccional = { ...seccional };
+        delete updatedSeccional.promotores[promotorId].personas[personaId];
+
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        await updateDoc(seccionalRef, {
+          promotores: updatedSeccional.promotores,
+          fechaActualizacion: new Date().toISOString()
+        });
+
+        // Actualizar estado local
+        setSeccionales(prev => prev.map(s => s.id === seccionalId ? updatedSeccional : s));
+      } else {
+        // Si está offline, usar el contexto offline
+        const success = deletePersonOffline(seccionalId, promotorId, personaId);
+        if (!success) {
+          alert('Error al eliminar persona offline');
+          return;
+        }
+      }
+
+      alert('Persona eliminada exitosamente');
+    } catch (error) {
+      console.error('Error al eliminar persona:', error);
+      alert('Error al eliminar persona: ' + error.message);
+    }
+  };
+
+  // Función para eliminar promotor
+  const handleDeletePromotor = async (seccionalId, promotorId, promotorNombre) => {
+    const seccional = seccionales.find(s => s.id === seccionalId);
+    
+    // Verificar que el usuario puede eliminar (debe ser admin o el que subió la seccional)
+    if (!isAdmin && seccional?.subidoPor !== currentUser?.email) {
+      alert('Solo puedes eliminar promotores de seccionales que tú hayas subido');
+      return;
+    }
+
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar al promotor "${promotorNombre}" y todas sus personas asociadas?`)) {
+      return;
+    }
+
+    try {
+      if (isOnline) {
+        // Si está online, eliminar directamente de Firebase
+        const updatedSeccional = { ...seccional };
+        delete updatedSeccional.promotores[promotorId];
+
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        await updateDoc(seccionalRef, {
+          promotores: updatedSeccional.promotores,
+          fechaActualizacion: new Date().toISOString()
+        });
+
+        // Actualizar estado local
+        setSeccionales(prev => prev.map(s => s.id === seccionalId ? updatedSeccional : s));
+      } else {
+        alert('No se puede eliminar promotores en modo offline. Conéctate a internet e inténtalo de nuevo.');
+        return;
+      }
+
+      alert('Promotor eliminado exitosamente');
+    } catch (error) {
+      console.error('Error al eliminar promotor:', error);
+      alert('Error al eliminar promotor: ' + error.message);
+    }
+  };
+
+  // Función para eliminar seccional completa
+  const handleDeleteSeccional = async (seccionalId, seccionalNumero) => {
+    const seccional = seccionales.find(s => s.id === seccionalId);
+    
+    // Verificar que el usuario puede eliminar (debe ser admin o el que subió la seccional)
+    if (!isAdmin && seccional?.subidoPor !== currentUser?.email) {
+      alert('Solo puedes eliminar seccionales que tú hayas subido');
+      return;
+    }
+
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar completamente la Seccional ${seccionalNumero}? Esta acción no se puede deshacer y eliminará todos los promotores y personas asociadas.`)) {
+      return;
+    }
+
+    if (!window.confirm(`CONFIRMACIÓN FINAL: Vas a eliminar TODA la Seccional ${seccionalNumero}. ¿Estás completamente seguro?`)) {
+      return;
+    }
+
+    try {
+      if (isOnline) {
+        // Si está online, eliminar directamente de Firebase
+        const seccionalRef = doc(db, 'seccionales', seccionalId);
+        await deleteDoc(seccionalRef);
+
+        // Actualizar estado local
+        setSeccionales(prev => prev.filter(s => s.id !== seccionalId));
+      } else {
+        alert('No se pueden eliminar seccionales completas en modo offline. Conéctate a internet e inténtalo de nuevo.');
+        return;
+      }
+
+      alert(`Seccional ${seccionalNumero} eliminada exitosamente`);
+    } catch (error) {
+      console.error('Error al eliminar seccional:', error);
+      alert('Error al eliminar seccional: ' + error.message);
+    }
+  };
+
   // Función para filtrar personas basada en el término de búsqueda
   const filterPersonas = (personas, promotorNombre, seccionalNumero) => {
     if (!searchTerm) return personas;
@@ -1134,25 +1256,41 @@ const GeneralPanel = () => {
                   <h2 className="text-xl font-semibold text-blue-900">
                     Seccional {seccional.numero}
                   </h2>
-                  {/* Mostrar información de quién subió la seccional */}
-                  {seccional.subidoPor && (
-                    <div className="text-sm text-blue-700">
-                      <div className="bg-blue-100 px-3 py-1 rounded-md">
-                        <span className="font-medium">Subido por:</span> {seccional.subidoPor}
-                        {seccional.fechaSubida && (
-                          <div className="text-xs text-blue-600 mt-1">
-                            {new Date(seccional.fechaSubida).toLocaleDateString('es-ES', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </div>
-                        )}
+                  <div className="flex items-center space-x-4">
+                    {/* Mostrar información de quién subió la seccional */}
+                    {seccional.subidoPor && (
+                      <div className="text-sm text-blue-700">
+                        <div className="bg-blue-100 px-3 py-1 rounded-md">
+                          <span className="font-medium">Subido por:</span> {seccional.subidoPor}
+                          {seccional.fechaSubida && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              {new Date(seccional.fechaSubida).toLocaleDateString('es-ES', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    {/* Botón para eliminar seccional */}
+                    {(isAdmin || seccional.subidoPor === currentUser?.email) && (
+                      <button
+                        onClick={() => handleDeleteSeccional(seccional.id, seccional.numero)}
+                        className="inline-flex items-center bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
+                        title="Eliminar toda la seccional"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span className="hidden sm:inline">Eliminar Seccional</span>
+                        <span className="sm:hidden">Eliminar</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -1161,85 +1299,27 @@ const GeneralPanel = () => {
                   <div className="space-y-6">
                     {Object.entries(seccional.promotores).map(([promotorId, promotor]) => (
                       <div key={promotorId} className="border rounded-lg p-4">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                          Promotor: {promotor.nombre}
-                        </h3>
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            Promotor: {promotor.nombre}
+                          </h3>
+                          {/* Botón para eliminar promotor */}
+                          {(isAdmin || seccional.subidoPor === currentUser?.email) && (
+                            <button
+                              onClick={() => handleDeletePromotor(seccional.id, promotorId, promotor.nombre)}
+                              className="inline-flex items-center bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors duration-200 shadow-sm"
+                              title="Eliminar promotor y todas sus personas"
+                            >
+                              <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              <span className="hidden sm:inline">Eliminar</span>
+                            </button>
+                          )}
+                        </div>
                         
                         {promotor.personas && Object.keys(promotor.personas).length > 0 ? (
                           <div>
-                            {/* Filtros para personas dentro del promotor */}
-                            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    Buscar en este promotor
-                                  </label>
-                                  <div className="relative">
-                                    <input
-                                      type="text"
-                                      value={searchTerm}
-                                      onChange={(e) => setSearchTerm(e.target.value)}
-                                      placeholder="Buscar persona..."
-                                      className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    />
-                                    {searchTerm && (
-                                      <button
-                                        onClick={() => setSearchTerm('')}
-                                        className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
-                                      >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    Filtrar por
-                                  </label>
-                                  <select
-                                    value={filterBy}
-                                    onChange={(e) => setFilterBy(e.target.value)}
-                                    className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="all">Todo</option>
-                                    <option value="nombre">Nombre</option>
-                                    <option value="curp">CURP</option>
-                                    <option value="clave">Clave Elector</option>
-                                    <option value="promotor">Promotor</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    Ordenar por
-                                  </label>
-                                  <select
-                                    value={sortBy}
-                                    onChange={(e) => setSortBy(e.target.value)}
-                                    className="w-full text-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="default">Por defecto (#)</option>
-                                    <option value="alphabetical-asc">A-Z</option>
-                                    <option value="alphabetical-desc">Z-A</option>
-                                    <option value="number-asc"># Menor a Mayor</option>
-                                    <option value="number-desc"># Mayor a Menor</option>
-                                  </select>
-                                </div>
-                              </div>
-                              
-                              {searchTerm && (
-                                <div className="mt-3 text-xs text-blue-600">
-                                  <span>Filtrando por: "<strong>{searchTerm}</strong>"</span>
-                                  <span className="ml-2 text-gray-500">
-                                    ({Object.keys(getFilteredPersonasForTable(promotor.personas, promotor.nombre)).length} resultados)
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            
                             <div className="overflow-x-auto">
                               <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
@@ -1259,6 +1339,12 @@ const GeneralPanel = () => {
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                       Estado Voto
                                     </th>
+                                    {/* Columna de acciones para eliminar */}
+                                    {(isAdmin || seccional.subidoPor === currentUser?.email) && (
+                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Acciones
+                                      </th>
+                                    )}
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1319,6 +1405,17 @@ const GeneralPanel = () => {
                                             )}
                                           </button>
                                         </td>
+                                        {/* Columna de acciones para eliminar persona */}
+                                        {(isAdmin || seccional.subidoPor === currentUser?.email) && (
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <button
+                                              onClick={() => handleDeletePerson(seccional.id, promotorId, personaId, persona.nombreCompleto)}
+                                              className="text-red-600 hover:text-red-900 transition-colors duration-200"
+                                            >
+                                              Eliminar
+                                            </button>
+                                          </td>
+                                        )}
                                       </tr>
                                     ));
                                   })()}

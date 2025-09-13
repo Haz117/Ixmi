@@ -227,6 +227,102 @@ export const OfflineProvider = ({ children }) => {
     }
   };
 
+  // Función para agregar persona
+  const addPersonOffline = (seccionalId, promotorId, personData) => {
+    const currentData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
+    const updatedData = { ...currentData };
+    
+    if (!updatedData[seccionalId]) {
+      console.error('Seccional no encontrada en datos locales');
+      return false;
+    }
+
+    if (!updatedData[seccionalId].promotores[promotorId]) {
+      console.error('Promotor no encontrado en datos locales');
+      return false;
+    }
+
+    const personaId = `persona_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    updatedData[seccionalId].promotores[promotorId].personas = updatedData[seccionalId].promotores[promotorId].personas || {};
+    updatedData[seccionalId].promotores[promotorId].personas[personaId] = {
+      ...personData,
+      fechaAgregado: new Date().toISOString()
+    };
+
+    setLocalData(updatedData);
+    localStorage.setItem('ixmicheck_offline_data', JSON.stringify(updatedData));
+    return true;
+  };
+
+  // Función para actualizar persona
+  const updatePersonOffline = (seccionalId, promotorId, personaId, personData) => {
+    const currentData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
+    const updatedData = { ...currentData };
+    
+    if (!updatedData[seccionalId]) {
+      console.error('Seccional no encontrada en datos locales');
+      return false;
+    }
+
+    if (!updatedData[seccionalId].promotores[promotorId]?.personas[personaId]) {
+      console.error('Persona no encontrada en datos locales');
+      return false;
+    }
+
+    updatedData[seccionalId].promotores[promotorId].personas[personaId] = {
+      ...updatedData[seccionalId].promotores[promotorId].personas[personaId],
+      ...personData,
+      fechaActualizado: new Date().toISOString()
+    };
+
+    setLocalData(updatedData);
+    localStorage.setItem('ixmicheck_offline_data', JSON.stringify(updatedData));
+    return true;
+  };
+
+  // Función para eliminar persona
+  const deletePersonOffline = (seccionalId, promotorId, personaId) => {
+    const currentData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
+    const updatedData = { ...currentData };
+    
+    if (!updatedData[seccionalId]) {
+      console.error('Seccional no encontrada en datos locales');
+      return false;
+    }
+
+    if (!updatedData[seccionalId].promotores[promotorId]?.personas[personaId]) {
+      console.error('Persona no encontrada en datos locales');
+      return false;
+    }
+
+    delete updatedData[seccionalId].promotores[promotorId].personas[personaId];
+    setLocalData(updatedData);
+    localStorage.setItem('ixmicheck_offline_data', JSON.stringify(updatedData));
+    return true;
+  };
+
+  // Función para subir seccional
+  const uploadSeccionalOffline = (seccionalNumber, promotoresData, userEmail = null) => {
+    const currentData = JSON.parse(localStorage.getItem('ixmicheck_offline_data') || '{}');
+    const seccionalId = `seccional_${seccionalNumber}`;
+    
+    const updatedData = {
+      ...currentData,
+      [seccionalId]: {
+        id: seccionalId,
+        numero: seccionalNumber,
+        promotores: promotoresData,
+        fechaActualizacion: new Date().toISOString(),
+        subidoPor: userEmail || 'Usuario desconocido',
+        fechaSubida: new Date().toISOString()
+      }
+    };
+    
+    setLocalData(updatedData);
+    localStorage.setItem('ixmicheck_offline_data', JSON.stringify(updatedData));
+    return true;
+  };
+
   const value = {
     isOnline,
     syncing,
@@ -237,6 +333,10 @@ export const OfflineProvider = ({ children }) => {
     updateVoteOffline,
     updateVoteOnline,
     loadDataFromFirebase,
+    addPersonOffline,
+    updatePersonOffline,
+    deletePersonOffline,
+    uploadSeccionalOffline,
     toggleNotifications: () => setNotificationsMuted(!notificationsMuted)
   };
 

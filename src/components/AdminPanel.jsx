@@ -31,6 +31,8 @@ const AdminPanel = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all');
   const [sortBy, setSortBy] = useState('default'); // default, alphabetical-asc, alphabetical-desc, number-asc, number-desc, newest, oldest
+  const [peopleSearchTerm, setPeopleSearchTerm] = useState('');
+  const [peopleFilterBy, setPeopleFilterBy] = useState('all');
   const [showEditPersonForm, setShowEditPersonForm] = useState(false);
   const [showAddPersonForm, setShowAddPersonForm] = useState(false);
   const [showAddUserForm, setShowAddUserForm] = useState(false);
@@ -493,24 +495,30 @@ const AdminPanel = () => {
       Object.entries(personas).filter(([, persona]) => {
         const searchLower = searchTerm.toLowerCase();
         
+        // Helper function para convertir a string de forma segura
+        const safeToString = (value) => {
+          if (value === null || value === undefined) return '';
+          return String(value).toLowerCase();
+        };
+        
         if (filterBy === 'all') {
           return (
-            persona.nombreCompleto?.toLowerCase().includes(searchLower) ||
-            persona.curp?.toLowerCase().includes(searchLower) ||
-            persona.claveElector?.toLowerCase().includes(searchLower) ||
-            promotorNombre?.toLowerCase().includes(searchLower) ||
-            seccionalNumero?.toString().includes(searchLower)
+            safeToString(persona.nombreCompleto).includes(searchLower) ||
+            safeToString(persona.curp).includes(searchLower) ||
+            safeToString(persona.claveElector).includes(searchLower) ||
+            safeToString(promotorNombre).includes(searchLower) ||
+            safeToString(seccionalNumero).includes(searchLower)
           );
         } else if (filterBy === 'promotor') {
-          return promotorNombre?.toLowerCase().includes(searchLower);
+          return safeToString(promotorNombre).includes(searchLower);
         } else if (filterBy === 'seccional') {
-          return seccionalNumero?.toString().includes(searchLower);
+          return safeToString(seccionalNumero).includes(searchLower);
         } else if (filterBy === 'nombre') {
-          return persona.nombreCompleto?.toLowerCase().includes(searchLower);
+          return safeToString(persona.nombreCompleto).includes(searchLower);
         } else if (filterBy === 'curp') {
-          return persona.curp?.toLowerCase().includes(searchLower);
+          return safeToString(persona.curp).includes(searchLower);
         } else if (filterBy === 'clave') {
-          return persona.claveElector?.toLowerCase().includes(searchLower);
+          return safeToString(persona.claveElector).includes(searchLower);
         }
         
         return false;
@@ -518,7 +526,7 @@ const AdminPanel = () => {
     );
   };
 
-  // Función para obtener todas las personas que coinciden con la búsqueda
+  // Función para obtener todas las personas que coinciden con la búsqueda (filtro admin)
   const getFilteredData = () => {
     if (!searchTerm) return seccionales;
     
@@ -545,6 +553,66 @@ const AdminPanel = () => {
         promotores: filteredPromotores
       };
     }).filter(seccional => Object.keys(seccional.promotores || {}).length > 0);
+  };
+
+  // Función para obtener todas las personas (para búsqueda dedicada de personas)
+  const getAllPeopleFiltered = () => {
+    if (!peopleSearchTerm) return [];
+
+    const allPeople = [];
+    
+    seccionales.forEach(seccional => {
+      if (seccional.promotores) {
+        Object.entries(seccional.promotores).forEach(([promotorId, promotor]) => {
+          if (promotor.personas) {
+            Object.entries(promotor.personas).forEach(([personaId, persona]) => {
+              const searchLower = peopleSearchTerm.toLowerCase();
+              
+              // Helper function para convertir a string de forma segura
+              const safeToString = (value) => {
+                if (value === null || value === undefined) return '';
+                return String(value).toLowerCase();
+              };
+              
+              let matches = false;
+              
+              if (peopleFilterBy === 'all') {
+                matches = (
+                  safeToString(persona.nombreCompleto).includes(searchLower) ||
+                  safeToString(persona.curp).includes(searchLower) ||
+                  safeToString(persona.claveElector).includes(searchLower) ||
+                  safeToString(promotor.nombre).includes(searchLower) ||
+                  safeToString(seccional.numero).includes(searchLower)
+                );
+              } else if (peopleFilterBy === 'nombre') {
+                matches = safeToString(persona.nombreCompleto).includes(searchLower);
+              } else if (peopleFilterBy === 'curp') {
+                matches = safeToString(persona.curp).includes(searchLower);
+              } else if (peopleFilterBy === 'clave') {
+                matches = safeToString(persona.claveElector).includes(searchLower);
+              } else if (peopleFilterBy === 'promotor') {
+                matches = safeToString(promotor.nombre).includes(searchLower);
+              } else if (peopleFilterBy === 'seccional') {
+                matches = safeToString(seccional.numero).includes(searchLower);
+              }
+              
+              if (matches) {
+                allPeople.push({
+                  ...persona,
+                  seccionalId: seccional.id,
+                  seccionalNumero: seccional.numero,
+                  promotorId: promotorId,
+                  promotorNombre: promotor.nombre,
+                  personaId: personaId
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+    
+    return allPeople;
   };
 
   // Funciones para manejo de usuarios
@@ -1646,14 +1714,14 @@ const AdminPanel = () => {
           </div>
         )}
 
-        {/* Search and Filter Section */}
+        {/* Search and Filter Section - Admin */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
             <div className="flex items-center">
               <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Buscar Personas</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Buscar y Filtrar (Admin)</h2>
             </div>
           </div>
           <div className="p-4 sm:p-6">
@@ -1935,6 +2003,215 @@ const AdminPanel = () => {
             </div>
           ))
         )}
+
+        {/* Search for People Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 sm:mb-8">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Buscar Personas</h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Término de búsqueda
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={peopleSearchTerm}
+                    onChange={(e) => setPeopleSearchTerm(e.target.value)}
+                    placeholder="Buscar por nombre, CURP, clave, promotor o seccional..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filtrar por
+                </label>
+                <select
+                  value={peopleFilterBy}
+                  onChange={(e) => setPeopleFilterBy(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                >
+                  <option value="all">Todo</option>
+                  <option value="nombre">Nombre</option>
+                  <option value="curp">CURP</option>
+                  <option value="clave">Clave de Elector</option>
+                  <option value="promotor">Promotor</option>
+                  <option value="seccional">Seccional</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Results for People Search */}
+            {peopleSearchTerm ? (
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Resultados de búsqueda ({getAllPeopleFiltered().length} personas encontradas)
+                  </h3>
+                  <button
+                    onClick={() => setPeopleSearchTerm('')}
+                    className="inline-flex items-center bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Limpiar búsqueda
+                  </button>
+                </div>
+
+                {getAllPeopleFiltered().length === 0 ? (
+                  <div className="bg-gray-50 rounded-lg p-8 text-center">
+                    <div className="mx-auto w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mb-4">
+                      <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">No se encontraron resultados</h4>
+                    <p className="text-gray-600">Intenta con un término de búsqueda diferente o ajusta los filtros</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    {/* Desktop Table */}
+                    <div className="hidden lg:block">
+                      <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-lg">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre Completo</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CURP</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clave de Elector</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Promotor</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seccional</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voto Listo</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {getAllPeopleFiltered().map((persona, index) => (
+                            <tr key={`${persona.seccionalId}-${persona.promotorId}-${persona.personaId}`} className="hover:bg-gray-50 transition-colors duration-200">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{persona.nombreCompleto}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{persona.curp}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{persona.claveElector}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{persona.promotorNombre}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{persona.seccionalNumero}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleVotoToggle(persona.seccionalId, persona.promotorId, persona.personaId, persona.votoListo)}
+                                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
+                                    persona.votoListo
+                                      ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                      : 'bg-red-100 text-red-800 hover:bg-red-200'
+                                  }`}
+                                >
+                                  {persona.votoListo ? (
+                                    <>
+                                      <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Listo
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                      Pendiente
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                                <button
+                                  onClick={() => handleEditPerson(persona.seccionalId, persona.promotorId, persona.personaId, persona)}
+                                  className="text-indigo-600 hover:text-indigo-900 transition-colors duration-200"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePerson(persona.seccionalId, persona.promotorId, persona.personaId)}
+                                  className="text-red-600 hover:text-red-900 transition-colors duration-200"
+                                >
+                                  Eliminar
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* Mobile Cards */}
+                    <div className="lg:hidden space-y-4">
+                      {getAllPeopleFiltered().map((persona, index) => (
+                        <div key={`${persona.seccionalId}-${persona.promotorId}-${persona.personaId}`} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-medium text-gray-900 text-base">{persona.nombreCompleto}</h4>
+                              <p className="text-sm text-gray-600">
+                                Promotor: {persona.promotorNombre} | Seccional: {persona.seccionalNumero}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleVotoToggle(persona.seccionalId, persona.promotorId, persona.personaId, persona.votoListo)}
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${
+                                persona.votoListo
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {persona.votoListo ? 'Listo' : 'Pendiente'}
+                            </button>
+                          </div>
+                          <div className="space-y-1 text-sm text-gray-600 mb-3">
+                            <p><span className="font-medium">CURP:</span> {persona.curp}</p>
+                            <p><span className="font-medium">Clave:</span> {persona.claveElector}</p>
+                          </div>
+                          <div className="flex space-x-3 text-sm">
+                            <button
+                              onClick={() => handleEditPerson(persona.seccionalId, persona.promotorId, persona.personaId, persona)}
+                              className="text-indigo-600 hover:text-indigo-900 font-medium"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => handleDeletePerson(persona.seccionalId, persona.promotorId, persona.personaId)}
+                              className="text-red-600 hover:text-red-900 font-medium"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-6 bg-gray-50 rounded-lg p-6 text-center">
+                <div className="mx-auto w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <h4 className="text-lg font-medium text-gray-900 mb-2">Buscar Personas Específicas</h4>
+                <p className="text-gray-600">Utiliza el campo de búsqueda para encontrar personas específicas por nombre, CURP, clave de elector, promotor o seccional.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
